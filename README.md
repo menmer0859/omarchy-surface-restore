@@ -53,6 +53,19 @@ Howdy enrollment runs locally and stores the model under `/etc/howdy/models/`. M
 
 Terminal sudo face authentication is a separate opt-in step. After `face` has enrolled a model, run `./install.sh sudo-face`. Whenever sudo requests authentication, the controlling terminal displays `Use face authentication? [y/N]`; only typing `y` or `Y` starts Howdy. Enter, any other input, timeout, unavailable terminal, or failed recognition continues through the existing password authentication. The setup is limited to `/etc/pam.d/sudo` and the root-owned `/usr/local/libexec/omarchy-sudo-face-consent` helper. It carries the existing faillock pre-authentication and success options into the sudo flow; it does not change `system-auth`, `su`, desktop login, or lock-screen behavior. The sudo PAM file and any replaced helper are backed up. Use `./scripts/restore.sh` to restore them; if the helper did not exist before installation, restore removes it.
 
+#### Verify terminal sudo face authentication
+
+1. Confirm the current account has an enrolled model with `test -s "/etc/howdy/models/$USER.dat"`. If it does not, run `./install.sh face` and enroll locally first.
+2. Run `./install.sh sudo-face` from the project directory. Before changing files, it checks the Howdy command and model, the `pam_howdy.so`, `pam_exec.so`, and `pam_faillock.so` modules, and the existing sudo PAM layout. It then shows the change scope and asks for confirmation. The installer backs up `/etc/pam.d/sudo`, installs a root-owned mode `0755` helper under `/usr/local/libexec/`, and updates only sudo's authentication rules.
+3. Run `sudo -k -v` to clear sudo's cached authentication and trigger a fresh check. Enter `N`; the normal sudo password prompt should follow. Enter the account password to verify the fallback.
+4. Run `sudo -k -v` again and enter `y`. Howdy should start the IR camera. A successful match should authenticate; a failed match should continue to the password prompt.
+
+Sudo caches successful authentication, so the prompt does not appear for every command. `sudo -k` forces a new check. Without a controlling terminal, the helper refuses to start the camera; non-interactive sudo remains subject to sudo's own password and TTY policy.
+
+In the PAM flow, `pam_faillock preauth` checks the account before asking for consent. `pam_exec.so quiet` calls the consent helper and suppresses PAM's user-facing “helper failed” message when the user declines; only `y`/`Y` reaches `pam_howdy.so`. Face success runs `pam_faillock authsucc`; decline or face failure continues through the existing `system-auth` password flow. `[y/N]` means decline is the default, so Enter never starts the camera.
+
+To fully revert the feature, run `./scripts/restore.sh` and choose the snapshot created before sudo face authentication was installed. Re-running the installer makes a newer snapshot. Before selecting one, inspect the backed-up `etc/pam.d/sudo`: choose a snapshot whose file does **not** contain the `omarchy-surface-restore sudo face authentication` marker to disable the feature completely.
+
 ## After installation
 
 For touchscreen support, reboot and select the entry containing `linux-surface` in Limine if it is not selected automatically. Confirm the running kernel and IPTS daemon:

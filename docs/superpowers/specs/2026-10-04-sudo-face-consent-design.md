@@ -22,7 +22,7 @@ The generated auth flow will follow this order (the faillock options are copied 
 
 ```pam
 auth requisite pam_faillock.so preauth <existing-preauth-options>
-auth [success=ok default=2] pam_exec.so /usr/local/libexec/omarchy-sudo-face-consent
+auth [success=ok default=2] pam_exec.so quiet /usr/local/libexec/omarchy-sudo-face-consent
 auth [success=ok default=1] pam_howdy.so
 auth [success=done default=die] pam_faillock.so authsucc <existing-authsucc-options>
 auth include system-auth

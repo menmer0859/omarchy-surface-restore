@@ -33,6 +33,19 @@ Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。�
 
 终端 sudo 的人脸认证是单独的可选步骤：完成 `face` 安装和本机录入后，运行 `./install.sh sudo-face`。每当 sudo 需要重新认证时，控制终端会显示 `Use face authentication? [y/N]`；只有明确输入 `y` 或 `Y` 才启动 Howdy 摄像头。直接回车、其他输入、超时、没有控制终端或识别失败，都会继续现有密码认证。它只修改 `/etc/pam.d/sudo` 和 root 所有的 `/usr/local/libexec/omarchy-sudo-face-consent`；会沿用 `system-auth` 中现有的 faillock 预认证与成功记录选项，不修改 `system-auth`、`su`、桌面登录或锁屏行为。sudo PAM 文件和原有 helper 会备份。运行 `./scripts/restore.sh` 可恢复；若安装前 helper 不存在，恢复时会删除它。
 
+### 终端 sudo 人脸验证步骤
+
+1. 确认当前用户已录入 Howdy 模型：`test -s "/etc/howdy/models/$USER.dat"`。如果文件不存在，先运行 `./install.sh face` 并完成本机人脸录入。
+2. 在项目目录运行 `./install.sh sudo-face`。安装器会先检查 Howdy 命令、模型、`pam_howdy.so`、`pam_exec.so`、`pam_faillock.so` 和 sudo 的 PAM 布局，再显示变更范围并要求确认。它会备份 `/etc/pam.d/sudo`，将 root 所有、权限为 `0755` 的 helper 安装到 `/usr/local/libexec/`，最后只更新 sudo 的认证规则。
+3. 用 `sudo -k -v` 清除 sudo 的认证缓存并触发一次真实验证。输入 `N` 后应该出现普通 sudo 密码提示；输入密码成功，表示密码回退可用。
+4. 再运行一次 `sudo -k -v`，这次输入 `y`。Howdy 应启动红外摄像头；识别成功则验证通过，识别失败则应继续到密码提示。
+
+sudo 会缓存成功认证，所以平时不会每次运行命令都询问。`sudo -k` 只用于强制触发下一次认证。无控制终端时 helper 会拒绝启动摄像头，非交互式 sudo 仍受 sudo 自身的密码/TTY 策略约束。
+
+PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` 调用同意 helper，并抑制用户拒绝时 PAM 模块产生的“helper failed”提示；只有输入 `y/Y` 才到 `pam_howdy.so`。人脸成功后写入 `pam_faillock authsucc`，失败或拒绝则进入原来的 `system-auth` 密码流程。该提示中的 `[y/N]` 表示默认拒绝，按回车不会启动摄像头。
+
+如需完全回退，运行 `./scripts/restore.sh`，选择 sudo 人脸安装前生成的快照并确认。重复安装会创建新的快照；选择前先检查快照内的 `etc/pam.d/sudo` 是否已经含有 `omarchy-surface-restore sudo face authentication` 标记。要关闭该功能，应选一份**不含此标记**的安装前备份。
+
 ## 安装后验证
 
 触摸屏配置完成后重启，在 Limine 选择名称含 `linux-surface` 的内核（如果它没有自动启动），再检查：

@@ -77,7 +77,7 @@ def render_sudo_pam(sudo_config: str, system_auth: str) -> str:
     rules = (
         f"{BEGIN}{newline}"
         f"{indent}auth requisite pam_faillock.so preauth{preauth_options}{newline}"
-        f"{indent}auth [success=ok default=2] pam_exec.so {HELPER}{newline}"
+        f"{indent}auth [success=ok default=2] pam_exec.so quiet {HELPER}{newline}"
         f"{indent}auth [success=ok default=1] pam_howdy.so{newline}"
         f"{indent}auth [success=done default=die] pam_faillock.so authsucc{authsucc_options}{newline}"
         f"{END}{newline}"

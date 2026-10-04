@@ -38,7 +38,7 @@ class ConfigureSudoPamTests(unittest.TestCase):
             result,
         )
         self.assertIn(
-            "auth [success=ok default=2] pam_exec.so /usr/local/libexec/omarchy-sudo-face-consent\n",
+            "auth [success=ok default=2] pam_exec.so quiet /usr/local/libexec/omarchy-sudo-face-consent\n",
             result,
         )
         self.assertIn("auth [success=ok default=1] pam_howdy.so\n", result)
