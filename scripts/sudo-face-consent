@@ -1,10 +1,24 @@
 #!/usr/bin/bash
 
-# pam_exec runs this helper before pam_howdy. Only this explicit tty response
-# may start the IR camera; all other outcomes return control to sudo's password
-# fallback through the PAM control jumps configured by configure-sudo-pam.py.
-if ! { exec 3<>/dev/tty; } 2>/dev/null; then
-  printf '%s\n' 'Face authentication skipped: no controlling terminal.' >&2
+# pam_exec starts the helper in a new session, so /dev/tty is unavailable even
+# when sudo was launched from an interactive terminal. Use PAM_TTY, which
+# pam_exec exports, and accept only local Linux virtual or pseudoterminals.
+if [[ -n ${PAM_TTY:-} ]]; then
+  pam_tty=${PAM_TTY#/dev/}
+  if [[ ! $pam_tty =~ ^(pts/[0-9]+|tty[0-9]+)$ ]]; then
+    printf '%s\n' 'Face authentication skipped: PAM_TTY is not a supported local terminal.' >&2
+    exit 1
+  fi
+
+  terminal_device="/dev/$pam_tty"
+  if [[ ! -c $terminal_device ]] || ! { exec 3<>"$terminal_device"; } 2>/dev/null; then
+    printf '%s\n' 'Face authentication skipped: PAM_TTY is unavailable.' >&2
+    exit 1
+  fi
+elif ! { exec 3<>/dev/tty; } 2>/dev/null; then
+  # Keep direct interactive execution useful for local diagnostics. PAM always
+  # provides PAM_TTY; without it, non-interactive calls fail closed.
+  printf '%s\n' 'Face authentication skipped: no terminal is available.' >&2
   exit 1
 fi
 
