@@ -42,6 +42,7 @@ Or choose a path directly:
 ./install.sh touch  # Surface kernel and touchscreen support
 ./install.sh face   # Howdy, local face enrollment, and lock-screen integration
 ./install.sh sudo-face  # Optional, consent-gated face auth for terminal sudo
+./install.sh polkit-face  # Optional face/password choice in graphical admin prompts
 ./install.sh all    # Both paths, in sequence
 ```
 
@@ -65,6 +66,25 @@ Sudo caches successful authentication, so the prompt does not appear for every c
 In the PAM flow, `pam_faillock preauth` checks the account before asking for consent. `pam_exec.so quiet` calls the consent helper and suppresses PAM's user-facing “helper failed” message when the user declines; only `y`/`Y` reaches `pam_howdy.so`. Because `pam_exec` runs the helper in a new session without a controlling `/dev/tty`, the helper opens only the local terminal named by PAM's `PAM_TTY` value. Face success runs `pam_faillock authsucc`; decline or face failure continues through the existing `system-auth` password flow. `[y/N]` means decline is the default, so Enter never starts the camera.
 
 To fully revert the feature, run `./scripts/restore.sh` and choose the snapshot created before sudo face authentication was installed. Re-running the installer makes a newer snapshot. Before selecting one, inspect the backed-up `etc/pam.d/sudo`: choose a snapshot whose file does **not** contain the `omarchy-surface-restore sudo face authentication` marker to disable the feature completely.
+
+Graphical applications that ask for administrator authentication use Polkit, not sudo. Run `./install.sh polkit-face` to add **Use face** and **Use password** buttons to Omarchy's fullscreen Polkit dialog. Howdy starts only after the user clicks **Use face**. Declining, a PAM conversation failure, or failed recognition continues to the password stack. The installer builds a small PAM consent module, clones Omarchy's Polkit plugin, and creates `/etc/pam.d/polkit-1`; it does not change `system-auth` or Polkit authorization policy. Howdy runs through `pam_exec.so`, which keeps its diagnostic output out of the Polkit conversation protocol. The installer rejects PAM stacks with additional authentication rules after `system-auth` so face success cannot skip them. It also reads Howdy's configured camera and grants the Polkit helper access only to that `/dev/videoN` node while retaining systemd's strict device policy. The dialog shows the selected identity and lets the user switch when multiple identities are available. It stops if another Polkit plugin clone is present. The UI source is based on Omarchy 4.0.4 and should be reviewed against other Omarchy releases before use.
+
+#### Verify graphical Polkit face authentication
+
+Trigger a graphical action that asks for administrator authentication, or run `pkexec /usr/bin/id` from the desktop session and confirm that the fullscreen Omarchy agent appears. Choose **Use password** and verify the password path. Trigger it again and choose **Use face**; Howdy should start only after the click. Failed recognition should continue to the password prompt, and cancelling should cancel the original action. Polkit temporarily caches some successful authorizations, so wait or trigger a different protected action if no prompt appears.
+
+Use `./scripts/restore.sh` and select the pre-installation snapshot to undo this feature. The snapshot restores or removes `/etc/pam.d/polkit-1`, `/usr/local/lib/security/pam_surface_face_consent.so`, the systemd camera rule, and user plugin files created by the installer.
+
+If `pkexec` displays only the text prompt `Use face authentication? [y/N]` and no fullscreen dialog, Quickshell may be unable to infer the graphical session from its systemd user-service cgroup. This project includes a local Arch package for upstream [Quickshell PR #875](https://github.com/quickshell-mirror/quickshell/pull/875), based on Arch's 0.3.1 recipe. Build and install it from the repository root:
+
+```bash
+cd packaging/quickshell-xdg-session
+makepkg -si
+```
+
+Review the PKGBUILD and package transaction; `makepkg` will ask to install build dependencies as needed. Then return to the repository root, rerun `./install.sh polkit-face` to install the camera device rule, and run `omarchy restart shell` (or log out and back in). Verify with `pkexec /usr/bin/id`: the Omarchy fullscreen dialog should appear, password should remain available, and the camera should start only after choosing **Use face**.
+
+The restore snapshot reverts the PAM and systemd device configuration but does not downgrade Quickshell. To return to the distribution package, run `sudo pacman -S quickshell`.
 
 ## After installation
 
@@ -113,6 +133,7 @@ The script lets you select a snapshot, prints the files it will restore, and ask
 - Face recognition is not a replacement for the password. Howdy and the additional lock plugin are maintained by separate upstream projects; inspect updates before applying them.
 - The Howdy model is sensitive biometric data. Protect backups that contain it and delete the model from the system if you remove face unlock.
 - Lock-screen Howdy uses a dedicated PAM service. Terminal sudo face authentication is disabled unless `./install.sh sudo-face` is run, and always requires an explicit terminal `y`/`Y` response before camera access.
+- Graphical Polkit face authentication is also disabled by default. When enabled, it requires an explicit **Use face** click; face recognition is not a password replacement.
 - An AUR helper executes third-party build recipes. Review the Howdy PKGBUILD and its dependencies before accepting the transaction.
 
 ## Troubleshooting

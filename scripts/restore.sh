@@ -2,7 +2,7 @@
 set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
-require_commands sudo find sort sed tar
+require_commands sudo find sort sed tar systemctl
 
 backup_root=${SURFACE_SETUP_BACKUP_ROOT:-/var/backups/omarchy-surface-restore}
 [[ -d "$backup_root" ]] || die "No backups found at $backup_root"
@@ -22,7 +22,7 @@ printf '\nThe latest snapshot will restore these paths:\n'
 sudo find "$snapshot" -mindepth 1 ! -name .created_paths -print | sed "s#^$snapshot/##" | sort
 if sudo test -s "$snapshot/.created_paths"; then
   printf '\nThe following paths created by the installer will be removed:\n'
-  sudo sort -u "$snapshot/.created_paths" | sed 's/^/  /'
+  sudo sort -ru "$snapshot/.created_paths" | sed 's/^/  /'
 fi
 printf '\nThis restores saved files; it does not remove installed packages or kernels.\n'
 ask_yes_no 'Restore the latest snapshot?' || die 'Restore cancelled.'
@@ -35,6 +35,7 @@ if sudo test -s "$snapshot/.created_paths"; then
     else
       sudo rm -f -- "$created_path"
     fi
-  done < <(sudo sort -u "$snapshot/.created_paths")
+  done < <(sudo sort -ru "$snapshot/.created_paths")
 fi
 info 'Saved files restored. Review permissions and restart the Omarchy shell or reboot as appropriate.'
+sudo systemctl daemon-reload

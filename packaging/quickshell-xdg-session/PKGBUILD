@@ -1,0 +1,58 @@
+# Downstream Arch package: quickshell 0.3.1 with upstream PR #875's session fix.
+# Keep package metadata and dependencies aligned with Arch's quickshell PKGBUILD.
+pkgname=quickshell
+pkgver=0.3.1
+pkgrel=2
+pkgdesc='Flexible toolkit for making desktop shells with QtQuick'
+arch=(x86_64 aarch64)
+url="https://git.outfoxxed.me/$pkgname/$pkgname"
+license=(LGPL-3.0-only)
+depends=(cpptrace libcpptrace.so
+         glibc libm.so
+         hicolor-icon-theme
+         jemalloc libjemalloc.so
+         libdrm libdrm.so
+         libgcc libgcc_s.so
+         libglvnd libEGL.so libOpenGL.so
+         libpipewire libpipewire-0.3.so
+         libstdc++ libstdc++.so
+         libxcb libxcb.so
+         mesa libgbm.so
+         pam libpam.so
+         polkit
+         qt6-base libQt6Core.so libQt6DBus.so libQt6Gui.so libQt6Network.so libQt6Widgets.so
+         qt6-declarative libQt6Qml.so libQt6Quick.so
+         qt6-svg
+         qt6-wayland libQt6WaylandClient.so
+         wayland libwayland-client.so)
+makedepends=(cli11 cmake ninja qt6-shadertools spirv-tools vulkan-headers wayland-protocols)
+_archive="$pkgname-$pkgver"
+source=("$_archive.tar.gz::$url/archive/v$pkgver.tar.gz"
+        quickshell-session-xdg-id.patch)
+sha256sums=('d60592622f1aa1cbb853d4814f605dfde827bc692befbfecffaccf4c90e352d8'
+            'e2e7d7094d9418c88d62c1f05f8c243aa43d04bfc6dbe59b93202a58a4246195')
+
+prepare() {
+  cd "$pkgname"
+  patch -Np1 -i "$srcdir/quickshell-session-xdg-id.patch"
+}
+
+build() {
+  cd "$pkgname"
+  local cmake_options=(
+    -D CMAKE_BUILD_TYPE=RelWithDebInfo
+    -D DISTRIBUTOR='Arch Linux (Omarchy Surface Restore)'
+    -D DISTRIBUTOR_DEBUGINFO_AVAILABLE=Yes
+    -D CRASH_REPORTER=Off
+    -D CMAKE_INSTALL_PREFIX=/usr
+    -D INSTALL_QML_PREFIX=lib/qt6/qml
+  )
+  cmake -G Ninja -B build -W no-dev "${cmake_options[@]}"
+  cmake --build build
+}
+
+package() {
+  cd "$pkgname"
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE
+}

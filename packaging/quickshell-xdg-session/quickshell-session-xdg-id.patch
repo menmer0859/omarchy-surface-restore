@@ -1,0 +1,44 @@
+From 18f9017b0181404e7b12860e785a35b0d2dc6883 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] services/polkit: register agent using XDG_SESSION_ID
+
+---
+ src/services/polkit/listener.cpp | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/src/services/polkit/listener.cpp b/src/services/polkit/listener.cpp
+--- a/src/services/polkit/listener.cpp
++++ b/src/services/polkit/listener.cpp
+@@ -13,0 +14,1 @@
++#include <qbytearray.h>
+@@ -15,0 +17,2 @@
++#include <qstring.h>
++#include <qtenvironmentvariables.h>
+@@ -95,0 +98,28 @@
++	const auto sessionId = qEnvironmentVariable("XDG_SESSION_ID");
++	if (!sessionId.isEmpty()) {
++		const auto sessionIdUtf8 = sessionId.toUtf8();
++		auto* subject = polkit_unix_session_new(sessionIdUtf8.constData());
++		if (subject != nullptr) {
++			GError* error = nullptr;
++			agent->registration_handle = polkit_agent_listener_register(
++			    POLKIT_AGENT_LISTENER(agent),
++			    POLKIT_AGENT_REGISTER_FLAGS_NONE,
++			    subject,
++			    path,
++			    nullptr,
++			    &error
++			);
++			g_object_unref(subject);
++
++			if (error != nullptr) {
++				qCWarning(logPolkitListener) << "failed to register listener:" << error->message;
++				g_clear_error(&error);
++				agent->cb->registerComplete(false);
++				return;
++			}
++
++			agent->cb->registerComplete(true);
++			return;
++		}
++	}
++
