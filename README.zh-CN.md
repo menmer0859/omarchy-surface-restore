@@ -55,6 +55,8 @@ PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` �
 
 回退时，在 `./scripts/restore.sh` 中选择安装前快照。快照会还原或移除 `/etc/pam.d/polkit-1`、`/usr/local/lib/security/pam_surface_face_consent.so`、systemd 摄像头规则及安装器创建的用户 Polkit 插件文件。
 
+已在运行 Omarchy 的 Surface Laptop 5 上实机验证：重启 shell 后运行 `pkexec /usr/bin/id` 会打开 Omarchy 全屏授权界面；点击 **Use face** 后红外摄像头启动，命令以 root 身份成功执行。
+
 如果 `pkexec` 只在终端显示 `Use face authentication? [y/N]`，却没有出现 Omarchy 全屏按钮，通常是 Quickshell 作为 systemd 用户服务运行时，无法从进程所属 cgroup 推断登录会话。项目提供了基于官方 Arch Quickshell 0.3.1 配方、仅包含上游 [PR #875](https://github.com/quickshell-mirror/quickshell/pull/875) 会话注册修复的本地 Arch 包。先在项目目录执行：
 
 ```bash
