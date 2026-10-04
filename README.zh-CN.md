@@ -22,6 +22,7 @@ cd omarchy-surface-restore
 ./install.sh touch      # Surface 内核与触摸支持
 ./install.sh face       # Howdy、人脸录入和锁屏切换
 ./install.sh sudo-face  # 可选：终端 sudo 人脸确认
+./install.sh polkit-face # 可选：图形管理员提示中的人脸/密码选择
 ./install.sh all        # 顺序配置两项
 ```
 
@@ -45,6 +46,27 @@ sudo 会缓存成功认证，所以平时不会每次运行命令都询问。`su
 PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` 调用同意 helper，并抑制用户拒绝时 PAM 模块产生的“helper failed”提示；只有输入 `y/Y` 才到 `pam_howdy.so`。由于 `pam_exec` 会在一个没有控制终端 `/dev/tty` 的新会话中运行 helper，helper 会通过 PAM 提供的 `PAM_TTY` 只打开本地终端设备。人脸成功后写入 `pam_faillock authsucc`，失败或拒绝则进入原来的 `system-auth` 密码流程。该提示中的 `[y/N]` 表示默认拒绝，按回车不会启动摄像头。
 
 如需完全回退，运行 `./scripts/restore.sh`，选择 sudo 人脸安装前生成的快照并确认。重复安装会创建新的快照；选择前先检查快照内的 `etc/pam.d/sudo` 是否已经含有 `omarchy-surface-restore sudo face authentication` 标记。要关闭该功能，应选一份**不含此标记**的安装前备份。
+
+图形软件请求管理员权限时通常走 Polkit，而不是 `sudo`。可选运行 `./install.sh polkit-face`，为 Omarchy 全屏 Polkit 提示添加“Use face”和“Use password”两个按钮。只有点击“Use face”才会把同意交给 PAM 并启动 Howdy；拒绝、对话故障或识别失败会进入原密码认证。安装器会构建一个小型 PAM 同意模块、克隆 Omarchy 自带的 Polkit 插件，并创建 `/etc/pam.d/polkit-1` 覆盖；不会修改 `system-auth` 或 Polkit 授权策略。Howdy 通过 `pam_exec.so` 运行，避免其诊断输出污染 Polkit 对话协议；PAM 栈若在 `system-auth` 后还有额外认证规则，安装器会拒绝更改以免人脸成功跳过这些规则。安装器还会从 Howdy 配置解析当前红外摄像头，只给 Polkit helper 开放该 `/dev/videoN` 节点，同时保留 systemd 的严格设备策略。若已有其他 Polkit 插件克隆，安装器会停止并要求先处理冲突。全屏提示会显示当前认证身份；如管理员身份不止一个，可点击身份按钮切换。当前 QML 基于 Omarchy 4.0.4，其他版本需要先检查插件变化。
+
+### 图形管理员提示验证
+
+安装后，从图形桌面触发一个确实要求管理员认证的动作；也可在终端运行 `pkexec /usr/bin/id`，确认请求出现在 Omarchy 全屏授权界面。先点“Use password”并验证密码路径，再重新触发授权、点“Use face”验证 Howdy。识别失败应显示密码输入；取消授权应取消原动作。Polkit 会短暂缓存部分授权，如果动作没有再次弹框，可稍后重试或触发另一项受保护的动作。
+
+回退时，在 `./scripts/restore.sh` 中选择安装前快照。快照会还原或移除 `/etc/pam.d/polkit-1`、`/usr/local/lib/security/pam_surface_face_consent.so`、systemd 摄像头规则及安装器创建的用户 Polkit 插件文件。
+
+已在运行 Omarchy 的 Surface Laptop 5 上实机验证：重启 shell 后运行 `pkexec /usr/bin/id` 会打开 Omarchy 全屏授权界面；点击 **Use face** 后红外摄像头启动，命令以 root 身份成功执行。
+
+如果 `pkexec` 只在终端显示 `Use face authentication? [y/N]`，却没有出现 Omarchy 全屏按钮，通常是 Quickshell 作为 systemd 用户服务运行时，无法从进程所属 cgroup 推断登录会话。项目提供了基于官方 Arch Quickshell 0.3.1 配方、仅包含上游 [PR #875](https://github.com/quickshell-mirror/quickshell/pull/875) 会话注册修复的本地 Arch 包。先在项目目录执行：
+
+```bash
+cd packaging/quickshell-xdg-session
+makepkg -si
+```
+
+`makepkg` 会显示需要的构建依赖并通过 sudo 请求安装；请审阅 PKGBUILD 和软件包变更。安装后返回项目根目录，再运行 `./install.sh polkit-face` 更新 Polkit 摄像头权限。随后运行 `omarchy restart shell` 或注销并重新登录，再测试 `pkexec /usr/bin/id`。成功时应该出现全屏界面；选择“Use password”测试密码回退，再重试并明确点击“Use face”。摄像头只有在选择人脸后才会启动。
+
+如果需要撤销 Polkit/PAM 与 systemd 摄像头规则，运行 `./scripts/restore.sh` 并选择本次安装快照。该操作不会降级 Quickshell 软件包；如需退回发行版版本，可运行 `sudo pacman -S quickshell`。
 
 ## 安装后验证
 
@@ -81,6 +103,7 @@ omarchy restart shell
 - AUR 软件包使用第三方构建脚本；安装前请检查 PKGBUILD 及其依赖。
 - 人脸模型属于敏感生物识别数据。保护系统备份，删除人脸解锁时也删除本机模型。
 - 锁屏 Howdy 使用专用 PAM 服务。除非明确运行 `./install.sh sudo-face`，终端 sudo 不会启用人脸认证；启用后，每次需要 sudo 认证时都必须先在终端明确输入 `y`/`Y` 才会访问摄像头。
+- 图形 Polkit 人脸认证也默认关闭。启用后必须在全屏提示中明确点击“Use face”；人脸识别不是密码的安全替代品。
 - 如果系统里已有另一个克隆 `omarchy.lock` 的用户插件，请先停用它，避免两个插件同时替换锁屏。
 
 ## 测试
