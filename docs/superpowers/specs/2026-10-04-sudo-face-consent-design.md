@@ -16,7 +16,7 @@ This is the terminal equivalent of a deliberate confirmation gesture. No graphic
 
 Add an explicit `sudo-face` installer action. It installs a root-owned confirmation helper and edits only `/etc/pam.d/sudo`; it backs up both existing paths first and is idempotent. The existing `sudo` password include and account/session rules remain in place.
 
-The sudo auth flow will use a root-owned confirmation helper called by `pam_exec.so`. The helper reads and writes only `/dev/tty`, accepts only `y` or `Y`, and returns failure on every other input or when no controlling terminal is available. PAM's environment is treated as untrusted; the helper uses fixed paths and does not interpolate PAM environment values into commands.
+The sudo auth flow will use a root-owned confirmation helper called by `pam_exec.so`. Since `pam_exec` starts its child in a new session, the helper cannot rely on `/dev/tty` even when sudo was launched from an interactive terminal. It will validate PAM's `PAM_TTY` value against local Linux virtual terminals and pseudoterminals (`tty<N>` or `pts/<N>`) and open only that device for the explicit `y`/`Y` response. Every other input, an unsupported or unavailable terminal, and timeout return failure. PAM environment values are never interpolated into commands or used as arbitrary paths.
 
 The generated auth flow will follow this order (the faillock options are copied from the matching lines in `system-auth`):
 
