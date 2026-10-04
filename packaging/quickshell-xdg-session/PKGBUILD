@@ -8,22 +8,22 @@ arch=(x86_64 aarch64)
 url="https://git.outfoxxed.me/$pkgname/$pkgname"
 license=(LGPL-3.0-only)
 depends=(cpptrace libcpptrace.so
-         glibc libm.so
+         glibc # libc.so libm.so
          hicolor-icon-theme
          jemalloc libjemalloc.so
-         libdrm libdrm.so
+         libdrm # libdrm.so
          libgcc libgcc_s.so
          libglvnd libEGL.so libOpenGL.so
          libpipewire libpipewire-0.3.so
          libstdc++ libstdc++.so
-         libxcb libxcb.so
-         mesa libgbm.so
+         libxcb # libxcb.so
+         mesa # libgbm.so
          pam libpam.so
          polkit
-         qt6-base libQt6Core.so libQt6DBus.so libQt6Gui.so libQt6Network.so libQt6Widgets.so
-         qt6-declarative libQt6Qml.so libQt6Quick.so
+         qt6-base # libQt6Core.so libQt6DBus.so libQt6Gui.so libQt6Network.so libQt6Widgets.so
+         qt6-declarative # libQt6Qml.so libQt6Quick.so
          qt6-svg
-         qt6-wayland libQt6WaylandClient.so
+         qt6-wayland # libQt6WaylandClient.so
          wayland libwayland-client.so)
 makedepends=(cli11 cmake ninja qt6-shadertools spirv-tools vulkan-headers wayland-protocols)
 _archive="$pkgname-$pkgver"
