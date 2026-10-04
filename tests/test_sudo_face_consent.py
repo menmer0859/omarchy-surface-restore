@@ -49,46 +49,45 @@ def run_with_controlling_tty(answer: bytes) -> tuple[int, bytes]:
 
 
 def run_with_pam_tty_without_controlling_tty(answer: bytes) -> tuple[int, bytes]:
-    master, slave = pty.openpty()
-    env = os.environ.copy()
-    env["PAM_TTY"] = os.ttyname(slave).removeprefix("/dev/")
-    process = subprocess.Popen(
-        [str(HELPER)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        env=env,
-        start_new_session=True,
-    )
-    os.close(slave)
+    child, terminal = pty.fork()
+    if child == 0:
+        env = os.environ.copy()
+        env["PAM_TTY"] = os.ttyname(0).removeprefix("/dev/")
+        process = subprocess.Popen(
+            [str(HELPER)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            start_new_session=True,
+        )
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        os._exit(process.returncode)
 
     output = bytearray()
     prompt = b"Use face authentication? [y/N]"
     try:
         deadline = time.monotonic() + 2
-        while prompt not in output and process.poll() is None and time.monotonic() < deadline:
-            ready, _, _ = select.select([master], [], [], 0.1)
+        while prompt not in output and time.monotonic() < deadline:
+            ready, _, _ = select.select([terminal], [], [], 0.1)
             if not ready:
                 continue
             try:
-                output.extend(os.read(master, 1024))
+                output.extend(os.read(terminal, 1024))
             except OSError as error:
                 if error.errno != errno.EIO:
                     raise
         if prompt in output:
-            os.write(master, answer)
-        try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-        if process.stderr is not None:
-            output.extend(process.stderr.read())
-            process.stderr.close()
+            os.write(terminal, answer)
+        _, status = os.waitpid(child, 0)
     finally:
-        os.close(master)
+        os.close(terminal)
 
-    return process.returncode, bytes(output)
+    return os.waitstatus_to_exitcode(status), bytes(output)
 
 
 class SudoFaceConsentTests(unittest.TestCase):
