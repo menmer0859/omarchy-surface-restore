@@ -42,7 +42,7 @@ Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。�
 
 sudo 会缓存成功认证，所以平时不会每次运行命令都询问。`sudo -k` 只用于强制触发下一次认证。无控制终端时 helper 会拒绝启动摄像头，非交互式 sudo 仍受 sudo 自身的密码/TTY 策略约束。
 
-PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` 调用同意 helper，并抑制用户拒绝时 PAM 模块产生的“helper failed”提示；只有输入 `y/Y` 才到 `pam_howdy.so`。人脸成功后写入 `pam_faillock authsucc`，失败或拒绝则进入原来的 `system-auth` 密码流程。该提示中的 `[y/N]` 表示默认拒绝，按回车不会启动摄像头。
+PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` 调用同意 helper，并抑制用户拒绝时 PAM 模块产生的“helper failed”提示；只有输入 `y/Y` 才到 `pam_howdy.so`。由于 `pam_exec` 会在一个没有控制终端 `/dev/tty` 的新会话中运行 helper，helper 会通过 PAM 提供的 `PAM_TTY` 只打开本地终端设备。人脸成功后写入 `pam_faillock authsucc`，失败或拒绝则进入原来的 `system-auth` 密码流程。该提示中的 `[y/N]` 表示默认拒绝，按回车不会启动摄像头。
 
 如需完全回退，运行 `./scripts/restore.sh`，选择 sudo 人脸安装前生成的快照并确认。重复安装会创建新的快照；选择前先检查快照内的 `etc/pam.d/sudo` 是否已经含有 `omarchy-surface-restore sudo face authentication` 标记。要关闭该功能，应选一份**不含此标记**的安装前备份。
 
