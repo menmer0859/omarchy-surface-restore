@@ -21,6 +21,31 @@ class QuickshellFixPackageTests(unittest.TestCase):
         patch_hash = hashlib.sha256((PACKAGE / "quickshell-session-xdg-id.patch").read_bytes()).hexdigest()
         self.assertIn(patch_hash, pkgbuild)
 
+    def test_runtime_dependencies_are_pacman_package_names_not_sonames(self):
+        pkgbuild = (PACKAGE / "PKGBUILD").read_text(encoding="utf-8")
+        dependency_block = re.search(r"depends=\((.*?)\)\nmakedepends=", pkgbuild, re.S)
+        self.assertIsNotNone(dependency_block)
+        dependencies = []
+        for line in dependency_block.group(1).splitlines():
+            dependencies.extend(line.split("#", 1)[0].split())
+        unresolved_sonames = {
+            "libm.so",
+            "libdrm.so",
+            "libxcb.so",
+            "libgbm.so",
+            "libQt6Core.so",
+            "libQt6DBus.so",
+            "libQt6Gui.so",
+            "libQt6Network.so",
+            "libQt6Widgets.so",
+            "libQt6Qml.so",
+            "libQt6Quick.so",
+            "libQt6WaylandClient.so",
+        }
+        self.assertFalse(unresolved_sonames.intersection(dependencies))
+        for package in ("glibc", "libdrm", "libxcb", "mesa", "qt6-base", "qt6-declarative", "qt6-wayland"):
+            self.assertIn(package, dependencies)
+
 
 if __name__ == "__main__":
     unittest.main()
