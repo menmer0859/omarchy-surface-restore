@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "surface.lock",
+  "name": "Surface Face Unlock",
+  "version": "1.0.0",
+  "author": "Surface Omarchy community",
+  "description": "Omarchy session lock with face-first Howdy authentication and password switching.",
+  "omarchy": {
+    "capabilities": [
+      "authentication"
+    ],
+    "clonedFrom": "omarchy.lock"
+  },
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

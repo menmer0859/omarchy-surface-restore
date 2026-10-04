@@ -1,0 +1,16 @@
+# Local artifacts and secrets
+.env
+.env.*
+*.dat
+*.model
+*.pkg.tar.*
+*.sig
+*.asc
+gnupg/
+backups/
+work/
+outputs/
+docs/superpowers/
+.DS_Store
+__pycache__/
+*.py[cod]
