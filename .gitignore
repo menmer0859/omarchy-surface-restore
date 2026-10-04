@@ -9,6 +9,7 @@
 gnupg/
 backups/
 work/
+.worktrees/
 outputs/
 docs/superpowers/
 .DS_Store

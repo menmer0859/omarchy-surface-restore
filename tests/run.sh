@@ -8,6 +8,8 @@ export PYTHONDONTWRITEBYTECODE=1
 for script in install.sh scripts/*.sh tests/*.sh; do
   bash -n "$script"
 done
+bash -n scripts/sudo-face-consent
+python3 -m py_compile scripts/configure-sudo-pam.py
 
 bash tests/test-common.sh
 bash tests/test-installer.sh

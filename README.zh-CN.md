@@ -21,6 +21,7 @@ cd omarchy-surface-restore
 ```bash
 ./install.sh touch      # Surface 内核与触摸支持
 ./install.sh face       # Howdy、人脸录入和锁屏切换
+./install.sh sudo-face  # 可选：终端 sudo 人脸确认
 ./install.sh all        # 顺序配置两项
 ```
 
@@ -29,6 +30,8 @@ cd omarchy-surface-restore
 人脸配置需要 `yay` 或 `paru` 和 `v4l-utils`。请检查 AUR helper 展示的构建配方和软件变更。安装器会列出稳定摄像头路径，结合 `v4l2-ctl --list-devices` 或 Howdy 摄像头测试，选择红外摄像头。不要猜测 `/dev/video0`；摄像头编号可能改变。
 
 Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。模型文件不会上传或放进 Git。锁屏默认尝试人脸识别，并提供密码/人脸切换按钮。Howdy 使用独立 PAM 服务，系统密码 PAM 不会被替换。
+
+终端 sudo 的人脸认证是单独的可选步骤：完成 `face` 安装和本机录入后，运行 `./install.sh sudo-face`。每当 sudo 需要重新认证时，控制终端会显示 `Use face authentication? [y/N]`；只有明确输入 `y` 或 `Y` 才启动 Howdy 摄像头。直接回车、其他输入、超时、没有控制终端或识别失败，都会继续现有密码认证。它只修改 `/etc/pam.d/sudo` 和 root 所有的 `/usr/local/libexec/omarchy-sudo-face-consent`；会沿用 `system-auth` 中现有的 faillock 预认证与成功记录选项，不修改 `system-auth`、`su`、桌面登录或锁屏行为。sudo PAM 文件和原有 helper 会备份。运行 `./scripts/restore.sh` 可恢复；若安装前 helper 不存在，恢复时会删除它。
 
 ## 安装后验证
 
@@ -64,7 +67,7 @@ omarchy restart shell
 - 切勿提交 `*.dat`、相机抓拍、模型文件、软件包归档、私钥或备份目录。
 - AUR 软件包使用第三方构建脚本；安装前请检查 PKGBUILD 及其依赖。
 - 人脸模型属于敏感生物识别数据。保护系统备份，删除人脸解锁时也删除本机模型。
-- 安装器只接入 Omarchy 锁屏专用 PAM 文件，不会把 Howdy 添加到 `sudo`、系统登录或全局 PAM 配置。
+- 锁屏 Howdy 使用专用 PAM 服务。除非明确运行 `./install.sh sudo-face`，终端 sudo 不会启用人脸认证；启用后，每次需要 sudo 认证时都必须先在终端明确输入 `y`/`Y` 才会访问摄像头。
 - 如果系统里已有另一个克隆 `omarchy.lock` 的用户插件，请先停用它，避免两个插件同时替换锁屏。
 
 ## 测试

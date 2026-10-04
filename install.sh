@@ -6,11 +6,12 @@ source "$root/scripts/common.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [touch|face|all|check]
+Usage: ./install.sh [touch|face|sudo-face|all|check]
 
 With no argument, an interactive menu is shown.
   touch  Install linux-surface kernel support and iptsd
   face   Configure Howdy and Omarchy lock-screen face/password switching
+  sudo-face  Optionally enable explicit-consent Howdy for terminal sudo
   all    Run both setup paths
   check  Read-only system compatibility summary
 
@@ -48,16 +49,18 @@ if [[ -z "$action" ]]; then
 Choose a setup path:
   1) Restore touchscreen support
   2) Configure IR face unlock and password switching
-  3) Do both
-  4) Read-only compatibility check
-  5) Exit
+  3) Enable consent-gated face authentication for sudo
+  4) Do both touchscreen and lock-screen face setup
+  5) Read-only compatibility check
+  6) Exit
 EOF
-  read -r -p 'Selection [1-5]: ' selection
+  read -r -p 'Selection [1-6]: ' selection
   case "$selection" in
     1) action=touch ;;
     2) action=face ;;
-    3) action=all ;;
-    4) action=check ;;
+    3) action=sudo-face ;;
+    4) action=all ;;
+    5) action=check ;;
     *) exit 0 ;;
   esac
 fi
@@ -67,6 +70,7 @@ case "$action" in
   check) check_system ;;
   touch) exec "$root/scripts/install-touch.sh" ;;
   face) exec "$root/scripts/install-face.sh" ;;
+  sudo-face) exec "$root/scripts/install-sudo-face.sh" ;;
   all)
     "$root/scripts/install-touch.sh"
     "$root/scripts/install-face.sh"

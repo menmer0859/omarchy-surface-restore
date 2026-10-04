@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+
+# pam_exec runs this helper before pam_howdy. Only this explicit tty response
+# may start the IR camera; all other outcomes return control to sudo's password
+# fallback through the PAM control jumps configured by configure-sudo-pam.py.
+if ! { exec 3<>/dev/tty; } 2>/dev/null; then
+  printf '%s\n' 'Face authentication skipped: no controlling terminal.' >&2
+  exit 1
+fi
+
+printf 'Use face authentication? [y/N] ' >&3
+answer=''
+if ! IFS= read -r -t 30 answer <&3; then
+  exit 1
+fi
+
+case "$answer" in
+  y|Y) exit 0 ;;
+  *) exit 1 ;;
+esac

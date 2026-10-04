@@ -41,6 +41,7 @@ Or choose a path directly:
 ```bash
 ./install.sh touch  # Surface kernel and touchscreen support
 ./install.sh face   # Howdy, local face enrollment, and lock-screen integration
+./install.sh sudo-face  # Optional, consent-gated face auth for terminal sudo
 ./install.sh all    # Both paths, in sequence
 ```
 
@@ -49,6 +50,8 @@ The touch path downloads the upstream signing key and checks its fingerprint (`8
 The face path requires an AUR helper (`yay` or `paru`) and `v4l-utils`. Review the helper's package prompts. The installer lists stable V4L2 paths; use `v4l2-ctl --list-devices` and Howdy's camera test to identify the IR node, then enter its number. If the camera is not in `/dev/v4l/by-path`, stop and investigate device permissions instead of guessing `/dev/video0`. If another user plugin already clones the Omarchy lock plugin, disable it first to avoid two plugins replacing the same lock screen.
 
 Howdy enrollment runs locally and stores the model under `/etc/howdy/models/`. Model files are excluded from Git. The installer makes the selected model readable by the local account that the lock screen runs as, while keeping it root-owned. The lock screen starts in face mode when a model is present and offers a visible button to switch to password. Choosing face again restarts recognition. Password PAM configuration is not edited.
+
+Terminal sudo face authentication is a separate opt-in step. After `face` has enrolled a model, run `./install.sh sudo-face`. Whenever sudo requests authentication, the controlling terminal displays `Use face authentication? [y/N]`; only typing `y` or `Y` starts Howdy. Enter, any other input, timeout, unavailable terminal, or failed recognition continues through the existing password authentication. The setup is limited to `/etc/pam.d/sudo` and the root-owned `/usr/local/libexec/omarchy-sudo-face-consent` helper. It carries the existing faillock pre-authentication and success options into the sudo flow; it does not change `system-auth`, `su`, desktop login, or lock-screen behavior. The sudo PAM file and any replaced helper are backed up. Use `./scripts/restore.sh` to restore them; if the helper did not exist before installation, restore removes it.
 
 ## After installation
 
@@ -96,7 +99,7 @@ The script lets you select a snapshot, prints the files it will restore, and ask
 - Face enrollment is local. Never commit `*.dat`, camera snapshots, Howdy model archives, package archives, private signing keys, or backup directories.
 - Face recognition is not a replacement for the password. Howdy and the additional lock plugin are maintained by separate upstream projects; inspect updates before applying them.
 - The Howdy model is sensitive biometric data. Protect backups that contain it and delete the model from the system if you remove face unlock.
-- The scripts use a dedicated lock-screen PAM service. They do not add Howdy to `sudo`, login, or the global PAM stack.
+- Lock-screen Howdy uses a dedicated PAM service. Terminal sudo face authentication is disabled unless `./install.sh sudo-face` is run, and always requires an explicit terminal `y`/`Y` response before camera access.
 - An AUR helper executes third-party build recipes. Review the Howdy PKGBUILD and its dependencies before accepting the transaction.
 
 ## Troubleshooting
