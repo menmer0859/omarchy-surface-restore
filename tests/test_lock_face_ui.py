@@ -91,15 +91,21 @@ class LockFaceUiTests(unittest.TestCase):
         position_handler = next(line for line in self.view.splitlines() if "onPositionChanged:" in line)
         self.assertNotIn("faceIntentRequested", position_handler)
 
-    def test_blank_screen_wake_requests_one_intent_but_bright_mouse_motion_only_wakes(self):
+    def test_tab_keys_remain_available_for_retry_and_password_focus(self):
+        key_handler = qml_block(self.view, "Keys.onPressed:")
+        self.assertIn("Qt.Key_Tab", key_handler)
+        self.assertIn("Qt.Key_Backtab", key_handler)
+        self.assertRegex(key_handler, r"if \(event\.key === Qt\.Key_Tab \|\| event\.key === Qt\.Key_Backtab\)\s+return")
+
+    def test_blank_screen_pointer_motion_wakes_without_requesting_face_auth(self):
         self.assertIn("property bool displayBlanked: false", self.service, "display blank tracking must be present")
         blank = qml_block(self.service, "function runBlank()")
         wake = qml_block(self.service, "function handleWakeRequested()")
         self.assertIn("displayBlanked = true", blank, "blank action must record this plugin blanked the display")
-        self.assertIn("var wasBlanked = displayBlanked", wake, "wake handler must snapshot the state before clearing it")
         self.assertIn("runWake()", wake, "wake handler must wake the display")
-        self.assertIn('type: "INTENT"', wake, "only a previously blanked screen wake becomes face intent")
-        self.assertIn("if (wasBlanked)", wake, "bright-screen movement must remain a wake only")
+        self.assertNotIn('type: "INTENT"', wake, "passive pointer entry and movement must never start face auth")
+        intent = qml_block(self.view, "function requestFaceIntent()")
+        self.assertIn("faceIntentRequested()", intent, "explicit key presses and pointer presses request face auth")
 
     def test_face_attempt_is_bounded_and_retry_is_explicit(self):
         self.assertNotIn("faceRetryTimer", self.service)

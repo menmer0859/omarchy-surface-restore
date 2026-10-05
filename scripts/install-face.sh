@@ -96,4 +96,4 @@ sudo chmod 0644 "$pam_file"
 "$root/scripts/install-lock-ui.sh"
 
 info 'Howdy face authentication and Omarchy lock-screen switching are configured.'
-printf 'After the secure lock appears, press a key or click/touch to request one face scan (up to 12 seconds). Retry is explicit; password remains available and its PAM service is unchanged.\n'
+printf 'After the secure lock appears, press a key or click/touch to request one face attempt. The UI/PAM request aborts after 12 seconds; immediate Howdy matcher cleanup on PAM abort is not yet guaranteed. Retry is explicit; password remains available and its PAM service is unchanged.\n'

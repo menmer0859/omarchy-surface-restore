@@ -87,6 +87,8 @@ Item {
     Keys.onPressed: function (event) {
         if (!inputEnabled)
             return;
+        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+            return;
         if (!passwordMode)
             root.requestFaceIntent();
         else

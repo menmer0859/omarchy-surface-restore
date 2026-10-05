@@ -258,10 +258,7 @@ Item {
     function handleWakeRequested() {
         if (!lockRequested)
             return;
-        var wasBlanked = displayBlanked;
         runWake();
-        if (wasBlanked)
-            applyFaceEvent({ type: "INTENT" });
     }
 
     function runBlank() {

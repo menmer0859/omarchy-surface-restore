@@ -10,7 +10,7 @@ grep -q 'sudo-face) exec' "$repo_root/install.sh"
 [[ -x "$repo_root/scripts/install-polkit-face.sh" ]]
 grep -q 'polkit-face) exec' "$repo_root/install.sh"
 grep -q 'omarchy-polkit-howdy.py' "$repo_root/scripts/install-polkit-face.sh"
-grep -q 'request one face scan (up to 12 seconds)' "$repo_root/scripts/install-face.sh"
+grep -q 'UI/PAM request aborts after 12 seconds' "$repo_root/scripts/install-face.sh"
 menu_output=$(printf '7\n' | "$repo_root/install.sh")
 grep -q '3) Enable consent-gated face authentication for sudo' <<< "$menu_output"
 grep -q '4) Enable consent-gated face authentication for graphical admin prompts' <<< "$menu_output"
