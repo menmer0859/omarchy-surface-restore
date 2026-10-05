@@ -11,6 +11,7 @@ Item {
     property bool fingerprintConfigured: false
     property bool faceConfigured: false
     property bool faceAuthenticating: false
+    property string facePhase: "inactive"
     property string unlockMode: "password"
     property bool authenticatingPassword: false
     property string failureMessage: ""
@@ -20,7 +21,7 @@ Item {
     property string passwordText: ""
     property bool syncingPasswordText: false
 
-    readonly property bool passwordMode: !faceConfigured || unlockMode === "password"
+    readonly property bool passwordMode: !faceConfigured || facePhase === "password" || unlockMode === "password"
     readonly property string placeholderText: "输入密码"
     readonly property int fieldWidth: 381
     readonly property int fieldHeight: 67
@@ -42,7 +43,16 @@ Item {
     signal passwordTextEdited(string password)
     signal clearFailureRequested
     signal wakeRequested
+    signal faceIntentRequested
+    signal faceRetryRequested
     signal unlockModeRequested(string mode)
+
+    function requestFaceIntent() {
+        if (!inputEnabled)
+            return;
+        wakeRequested();
+        faceIntentRequested();
+    }
 
     // Cache-busts the lock background by appending `?v=`. Adding a query
     // string keeps Image's loader happy while forcing it to reload when the
@@ -57,6 +67,8 @@ Item {
     function forcePasswordFocus() {
         if (inputEnabled && passwordMode)
             passwordInput.forceActiveFocus();
+        else if (inputEnabled)
+            forceActiveFocus();
     }
 
     function clearPassword() {
@@ -69,6 +81,17 @@ Item {
         syncingPasswordText = true;
         passwordInput.text = passwordText;
         syncingPasswordText = false;
+    }
+
+    focus: inputEnabled && !passwordMode
+    Keys.onPressed: function (event) {
+        if (!inputEnabled)
+            return;
+        if (!passwordMode)
+            root.requestFaceIntent();
+        else
+            root.wakeRequested();
+        event.accepted = true;
     }
 
     onPasswordTextChanged: syncPasswordText()
@@ -125,6 +148,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
+            onPressed: root.requestFaceIntent()
             onClicked: {
                 root.wakeRequested();
                 root.forcePasswordFocus();
@@ -217,7 +241,7 @@ Item {
             Text {
                 anchors.fill: parent
                 visible: !root.passwordMode
-                text: root.faceAuthenticating ? "正在识别人脸…" : "请面向摄像头"
+                text: root.facePhase === "scanning" ? "正在识别人脸…" : (root.facePhase === "failed" ? "未识别。重试人脸或使用密码" : "已锁定。点击或按键使用人脸")
                 color: Color.lock.text
                 font.family: Style.font.family
                 font.pixelSize: root.fieldFontSize
@@ -252,7 +276,9 @@ Item {
             height: 44
             anchors.top: inputField.bottom
             anchors.topMargin: 18
-            anchors.horizontalCenter: inputField.horizontalCenter
+            anchors.horizontalCenter: root.facePhase === "failed" ? undefined : inputField.horizontalCenter
+            anchors.right: root.facePhase === "failed" ? parent.horizontalCenter : undefined
+            anchors.rightMargin: root.facePhase === "failed" ? 8 : 0
             radius: Style.cornerRadius
             color: Color.lock.background
             activeFocusOnTab: root.inputEnabled && root.faceConfigured
@@ -261,7 +287,7 @@ Item {
             Text {
                 id: switchModeLabel
                 anchors.centerIn: parent
-                text: root.passwordMode ? "使用人脸解锁" : "使用密码解锁"
+                text: root.passwordMode ? "使用人脸" : "使用密码"
                 color: Color.lock.text
                 font.family: Style.font.family
                 font.pixelSize: Math.round(Style.font.heading)
@@ -270,10 +296,44 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 enabled: root.inputEnabled
-                onClicked: root.unlockModeRequested(root.passwordMode ? "face" : "password")
+                onClicked: {
+                    if (root.facePhase === "failed" && !root.passwordMode)
+                        root.unlockModeRequested("password");
+                    else
+                        root.unlockModeRequested(root.passwordMode ? "face" : "password");
+                }
             }
             Keys.onReturnPressed: root.unlockModeRequested(root.passwordMode ? "face" : "password")
             Keys.onSpacePressed: root.unlockModeRequested(root.passwordMode ? "face" : "password")
+        }
+
+        Rectangle {
+            id: faceRetryButton
+            visible: root.inputEnabled && root.faceConfigured && root.facePhase === "failed"
+            width: 180
+            height: 44
+            anchors.top: inputField.bottom
+            anchors.topMargin: 18
+            anchors.left: parent.horizontalCenter
+            anchors.leftMargin: 8
+            radius: Style.cornerRadius
+            color: Color.lock.background
+            activeFocusOnTab: visible
+
+            Text {
+                anchors.centerIn: parent
+                text: "重试人脸"
+                color: Color.lock.text
+                font.family: Style.font.family
+                font.pixelSize: Math.round(Style.font.heading)
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.faceRetryRequested()
+            }
+            Keys.onReturnPressed: root.faceRetryRequested()
+            Keys.onSpacePressed: root.faceRetryRequested()
         }
     }
 }

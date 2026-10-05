@@ -1,4 +1,5 @@
 import QtQuick
+import "FaceAttemptPolicy.js" as FaceAttemptPolicy
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
@@ -24,6 +25,13 @@ Item {
     property bool fingerprintConfigured: false
     property bool faceAuthenticating: false
     property bool faceConfigured: false
+    property var facePolicyState: FaceAttemptPolicy.createState()
+    property var activeFacePam: null
+    property int facePamLockId: 0
+    property int facePamAttemptId: 0
+    property double faceAttemptStartedAt: 0
+    property bool displayBlanked: false
+    property bool suspendSignalPending: false
     property string unlockMode: "password"
     property bool previewVisible: false
     property string enteredPassword: ""
@@ -39,6 +47,7 @@ Item {
 
     readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
     readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
+    readonly property string facePhase: facePolicyState.phase
 
     function realScreenCount() {
         var screens = Quickshell.screens || [];
@@ -130,6 +139,40 @@ Item {
         console.log("omarchy lock " + lastEventAt + " " + event);
     }
 
+    function abortFaceAttempt() {
+        faceAttemptTimer.stop();
+        faceAttemptStartedAt = 0;
+        facePamLockId = 0;
+        facePamAttemptId = 0;
+        faceAuthenticating = false;
+        if (activeFacePam) {
+            var context = activeFacePam;
+            activeFacePam = null;
+            context.abort();
+            context.destroy();
+        }
+    }
+
+    function applyFaceEvent(event) {
+        if (event.lockId === undefined)
+            event.lockId = facePolicyState.lockId;
+        var result = FaceAttemptPolicy.transition(facePolicyState, event);
+        facePolicyState = result.state;
+        faceAuthenticating = facePolicyState.phase === "scanning";
+
+        if (event.type === "FACE_RESULT" || event.type === "FACE_TIMEOUT" || event.type === "PASSWORD_SELECTED" || event.type === "UNLOCKED" || event.type === "SUSPEND")
+            faceAttemptTimer.stop();
+
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "START_FACE")
+                startFaceAttempt();
+            else if (result.effects[i] === "ABORT_FACE")
+                abortFaceAttempt();
+            else if (result.effects[i] === "UNLOCK")
+                finishUnlock();
+        }
+    }
+
     function resetAuthenticationState() {
         enteredPassword = "";
         pendingPassword = "";
@@ -138,31 +181,25 @@ Item {
         authenticatingPassword = false;
         fingerprintAuthenticating = false;
         fingerprintRetryTimer.stop();
-        faceAuthenticating = false;
-        faceRetryTimer.stop();
+        abortFaceAttempt();
         if (passwordPam.active)
             passwordPam.abort();
         if (fingerprintPam.active)
             fingerprintPam.abort();
-        if (facePam.active)
-            facePam.abort();
     }
 
     function setUnlockMode(mode) {
         if (mode !== "password" && (mode !== "face" || !faceConfigured))
             return;
-        if (unlockMode === mode)
+        if (unlockMode === mode && mode !== "face")
             return;
         unlockMode = mode;
         enteredPassword = "";
         failureMessage = "";
         if (mode === "password") {
-            faceRetryTimer.stop();
-            faceAuthenticating = false;
-            if (facePam.active)
-                facePam.abort();
+            applyFaceEvent({ type: "PASSWORD_SELECTED" });
         } else {
-            startFace();
+            applyFaceEvent({ type: "FACE_SELECTED" });
         }
         runWake();
     }
@@ -174,6 +211,7 @@ Item {
         }
 
         resetAuthenticationState();
+        applyFaceEvent({ type: "LOCK_REQUESTED", faceAvailable: faceConfigured });
         unlockMode = faceConfigured ? "face" : "password";
         lockRequested = true;
         armBlankTimer();
@@ -192,6 +230,7 @@ Item {
     function finishUnlock() {
         if (!root.locked && !lockRequested)
             return;
+        applyFaceEvent({ type: "UNLOCKED" });
         lockRequested = false;
         pendingSessionLock = false;
         sessionLockStabilizeTimer.stop();
@@ -209,21 +248,34 @@ Item {
     }
 
     function runWake() {
+        displayBlanked = false;
         if (!wakeProcess.running)
             wakeProcess.running = true;
         if (lockRequested)
             armBlankTimer();
     }
 
+    function handleWakeRequested() {
+        if (!lockRequested)
+            return;
+        var wasBlanked = displayBlanked;
+        runWake();
+        if (wasBlanked)
+            applyFaceEvent({ type: "INTENT" });
+    }
+
     function runBlank() {
-        if (!blankProcess.running)
+        if (!blankProcess.running) {
+            displayBlanked = true;
             blankProcess.running = true;
+        }
     }
 
     function submitPassword(value) {
         var password = String(value || "");
         if (!lockRequested || authenticatingPassword || password.length === 0)
             return;
+        applyFaceEvent({ type: "PASSWORD_SELECTED" });
         runWake();
         pendingPassword = password;
         failureMessage = "";
@@ -277,26 +329,51 @@ Item {
         }
     }
 
-    function startFace() {
+    function startFaceAttempt() {
         if (!lockRequested || !sessionLock.secure || !faceConfigured || unlockMode !== "face")
             return;
-        if (facePam.active || faceAuthenticating)
+        if (activeFacePam || faceAttemptTimer.running)
             return;
-        faceAuthenticating = true;
-        if (!facePam.start()) {
-            faceAuthenticating = false;
-            faceRetryTimer.restart();
+
+        var lockId = facePolicyState.lockId;
+        var attemptId = facePolicyState.attemptId;
+        var context = facePamFactory.createObject(root);
+        if (!context) {
+            applyFaceEvent({ type: "FACE_RESULT", lockId: lockId, attemptId: attemptId, result: "failure" });
+            return;
         }
+        activeFacePam = context;
+        facePamLockId = lockId;
+        facePamAttemptId = attemptId;
+        faceAttemptStartedAt = Date.now();
+        faceAuthenticating = true;
+        faceAttemptTimer.start();
+        context.completed.connect(function (result) {
+            root.handleFaceFinished(result, lockId, attemptId, context);
+        });
+        if (!context.start())
+            handleFaceFinished(PamResult.Error, lockId, attemptId, context);
     }
 
-    function handleFaceFinished(result) {
-        faceAuthenticating = false;
-        if (!lockRequested)
+    function handleFaceFinished(result, lockId, attemptId, context) {
+        if (context !== activeFacePam || lockId !== facePamLockId || attemptId !== facePamAttemptId)
             return;
-        if (result === PamResult.Success && unlockMode === "face")
-            finishUnlock();
-        else if (faceConfigured && unlockMode === "face")
-            faceRetryTimer.restart();
+        if (lockId !== facePolicyState.lockId || attemptId !== facePolicyState.attemptId || facePolicyState.phase !== "scanning")
+            return;
+
+        var elapsed = Date.now() - faceAttemptStartedAt;
+        activeFacePam = null;
+        facePamLockId = 0;
+        facePamAttemptId = 0;
+        faceAttemptStartedAt = 0;
+        faceAttemptTimer.stop();
+        context.destroy();
+        applyFaceEvent({
+            type: "FACE_RESULT",
+            lockId: lockId,
+            attemptId: attemptId,
+            result: result === PamResult.Success && elapsed < faceAttemptTimer.interval ? "success" : "failure"
+        });
     }
 
     WlSessionLock {
@@ -310,8 +387,8 @@ Item {
                 root.pendingSessionLock = false;
                 sessionLockStabilizeTimer.stop();
                 pendingSessionLockTimer.stop();
+                root.applyFaceEvent({ type: "LOCK_SECURE" });
                 root.startFingerprint();
-                root.startFace();
             }
         }
 
@@ -325,6 +402,7 @@ Item {
             }
 
             if (!locked && root.lockRequested) {
+                root.applyFaceEvent({ type: "UNLOCKED" });
                 root.lockRequested = false;
                 root.pendingSessionLock = false;
                 sessionLockStabilizeTimer.stop();
@@ -346,6 +424,7 @@ Item {
                 fingerprintConfigured: root.fingerprintConfigured
                 faceConfigured: root.faceConfigured
                 faceAuthenticating: root.faceAuthenticating
+                facePhase: root.facePhase
                 unlockMode: root.unlockMode
                 authenticatingPassword: root.authenticatingPassword
                 failureMessage: root.failureMessage
@@ -360,7 +439,12 @@ Item {
                     root.submitPassword(password);
                 }
                 onClearFailureRequested: root.failureMessage = ""
-                onWakeRequested: root.runWake()
+                onWakeRequested: root.handleWakeRequested()
+                onFaceIntentRequested: root.applyFaceEvent({ type: "INTENT" })
+                onFaceRetryRequested: function () {
+                    root.unlockMode = "face";
+                    root.applyFaceEvent({ type: "FACE_SELECTED" });
+                }
                 onUnlockModeRequested: function (mode) {
                     root.setUnlockMode(mode);
                 }
@@ -390,6 +474,7 @@ Item {
             fingerprintConfigured: root.fingerprintConfigured
             faceConfigured: root.faceConfigured
             faceAuthenticating: false
+            facePhase: "inactive"
             unlockMode: root.faceConfigured ? "face" : "password"
             authenticatingPassword: false
             failureMessage: ""
@@ -454,26 +539,45 @@ Item {
         onTriggered: root.startFingerprint()
     }
 
-    PamContext {
-        id: facePam
-        config: "omarchy-lock-face"
-        user: root.userName
+    Component {
+        id: facePamFactory
 
-        onCompleted: function (result) {
-            root.handleFaceFinished(result);
-        }
-        onError: function (error) {
-            root.faceAuthenticating = false;
-            if (root.lockRequested && root.faceConfigured && root.unlockMode === "face")
-                faceRetryTimer.restart();
+        PamContext {
+            config: "omarchy-lock-face"
+            user: root.userName
         }
     }
 
     Timer {
-        id: faceRetryTimer
-        interval: 3000
+        id: faceAttemptTimer
+        interval: 12000
         repeat: false
-        onTriggered: root.startFace()
+        onTriggered: root.applyFaceEvent({
+            type: "FACE_TIMEOUT",
+            lockId: root.facePamLockId,
+            attemptId: root.facePamAttemptId
+        });
+    }
+
+    Process {
+        id: suspendEventProc
+        command: ["dbus-monitor", "--system", "type='signal',sender='org.freedesktop.login1',path='/org/freedesktop/login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'"]
+        running: true
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function (data) {
+                var line = String(data || "");
+                if (line.indexOf("member=PrepareForSleep") >= 0) {
+                    root.suspendSignalPending = true;
+                } else if (root.suspendSignalPending && line.indexOf("boolean true") >= 0) {
+                    root.suspendSignalPending = false;
+                    root.applyFaceEvent({ type: "SUSPEND" });
+                }
+            }
+        }
+        onErrorOccurred: function (error) {
+            root.logEvent("suspend-monitor-error=" + error);
+        }
     }
 
     Process {
@@ -516,12 +620,18 @@ Item {
         }
         onExited: {
             root.faceConfigured = String(faceCheckStdout.text || "").trim() === "yes";
-            if (root.lockRequested && root.faceConfigured && root.unlockMode === "face")
-                root.startFace();
-            if (root.lockRequested && !root.faceConfigured)
+            root.applyFaceEvent({ type: "FACE_AVAILABILITY_CHANGED", faceAvailable: root.faceConfigured });
+            if (!root.faceConfigured && root.facePhase === "scanning") {
+                root.applyFaceEvent({
+                    type: "FACE_TIMEOUT",
+                    lockId: root.facePolicyState.lockId,
+                    attemptId: root.facePolicyState.attemptId
+                });
+            }
+            if (!root.faceConfigured && root.unlockMode === "face")
                 root.unlockMode = "password";
-            if (!root.faceConfigured && facePam.active)
-                facePam.abort();
+            else if (root.faceConfigured && root.facePhase === "locked_idle" && root.unlockMode === "password")
+                root.unlockMode = "face";
         }
     }
 
