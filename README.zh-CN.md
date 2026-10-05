@@ -4,7 +4,7 @@
 
 > 运行前请先阅读脚本。安装器会安装系统软件并修改配置文件；密码解锁会保留，人脸识别只是额外入口。
 
-实机验证基线：Surface Laptop 5、Omarchy 4.0.4、linux-surface 6.19.8、iptsd 3.1.0、Howdy `howdy-git` 2.6.1 开发版。其他 Surface 型号和 Omarchy 版本可能有差异；锁屏插件只在 Omarchy 4.0.4 上完整验证过。
+实机验证基线：Surface Laptop 5、Omarchy 4.0.4、linux-surface 6.19.8、iptsd 3.1.0、Howdy `howdy-git` 2.6.1 开发版。旧版锁屏行为曾在 Omarchy 4.0.4 上实测；本次“一次用户意图触发一次识别”的改动目前只有自动化测试，仍需在 Surface Laptop 5 实机复验。其他 Surface 型号和 Omarchy 版本不视为已支持。
 
 ## 快速开始
 
@@ -30,7 +30,7 @@ cd omarchy-surface-restore
 
 人脸配置需要 `yay` 或 `paru` 和 `v4l-utils`。请检查 AUR helper 展示的构建配方和软件变更。安装器会列出稳定摄像头路径，结合 `v4l2-ctl --list-devices` 或 Howdy 摄像头测试，选择红外摄像头。不要猜测 `/dev/video0`；摄像头编号可能改变。
 
-Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。模型文件不会上传或放进 Git。锁屏默认尝试人脸识别，并提供密码/人脸切换按钮。Howdy 使用独立 PAM 服务，系统密码 PAM 不会被替换。
+Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。模型文件不会上传或放进 Git。锁屏使用独立 PAM 服务，系统密码 PAM 不会被替换；摄像头只在 secure 后的新用户操作或用户唤醒插件熄灭的屏幕后启动一次，最多识别 12 秒，失败后必须显式重试。
 
 终端 sudo 的人脸认证是单独的可选步骤：完成 `face` 安装和本机录入后，运行 `./install.sh sudo-face`。每当 sudo 需要重新认证时，控制终端会显示 `Use face authentication? [y/N]`；只有明确输入 `y` 或 `Y` 才启动 Howdy 摄像头。直接回车、其他输入、超时、没有控制终端或识别失败，都会继续现有密码认证。它只修改 `/etc/pam.d/sudo` 和 root 所有的 `/usr/local/libexec/omarchy-sudo-face-consent`；会沿用 `system-auth` 中现有的 faillock 预认证与成功记录选项，不修改 `system-auth`、`su`、桌面登录或锁屏行为。sudo PAM 文件和原有 helper 会备份。运行 `./scripts/restore.sh` 可恢复；若安装前 helper 不存在，恢复时会删除它。
 
@@ -55,7 +55,7 @@ PAM 中的 `pam_faillock preauth` 先检查账户锁定；`pam_exec.so quiet` �
 
 回退时，在 `./scripts/restore.sh` 中选择安装前快照。快照会还原或移除 `/etc/pam.d/polkit-1`、`/usr/local/lib/security/pam_surface_face_consent.so`、systemd 摄像头规则及安装器创建的用户 Polkit 插件文件。
 
-已在运行 Omarchy 的 Surface Laptop 5 上实机验证：重启 shell 后运行 `pkexec /usr/bin/id` 会打开 Omarchy 全屏授权界面；点击 **Use face** 后红外摄像头启动，命令以 root 身份成功执行。
+旧版流程曾在 Surface Laptop 5 上实测：重启 shell 后运行 `pkexec /usr/bin/id` 会打开 Omarchy 全屏授权界面；点击 **Use face** 后红外摄像头启动，命令以 root 身份成功执行。本次失败后密码回退提示尚待重新进行图形实机验证。
 
 如果 `pkexec` 只在终端显示 `Use face authentication? [y/N]`，却没有出现 Omarchy 全屏按钮，通常是 Quickshell 作为 systemd 用户服务运行时，无法从进程所属 cgroup 推断登录会话。项目提供了基于官方 Arch Quickshell 0.3.1 配方、仅包含上游 [PR #875](https://github.com/quickshell-mirror/quickshell/pull/875) 会话注册修复的本地 Arch 包。先在项目目录执行：
 
@@ -85,7 +85,9 @@ systemctl status iptsd.service
 omarchy restart shell
 ```
 
-锁屏会先进入人脸识别；点“使用密码解锁”输入账户密码，点“使用人脸解锁”可切回。请在依赖人脸识别前确认密码仍可解锁。
+锁屏进入安全状态时不会自动启动相机。屏幕先显示“已锁定。点击或按键使用人脸”；之后新的按键、点击/触摸，或用户输入唤醒本插件熄灭的显示器，才会启动最长 12 秒的一次识别。亮屏时单纯移动鼠标、锁屏快捷键释放、显示器变化和预览均不会启动相机。识别失败后不会自动重试；点“重试人脸”可再试，点“使用密码”进入原密码流程并立即中断人脸识别。请在依赖人脸识别前确认密码仍可解锁。
+
+更新已有锁屏插件时，在项目目录运行 `./scripts/install-lock-ui.sh`，然后运行 `omarchy restart shell`。安装器会先备份旧插件；`./scripts/restore.sh` 可恢复原目录，并在适用时移除新加的 `FaceAttemptPolicy.js`。这只更新用户级锁屏插件，不安装或更改系统 PAM。
 
 ## 备份与恢复
 

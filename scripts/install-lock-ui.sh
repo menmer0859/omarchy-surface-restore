@@ -12,38 +12,26 @@ pam_file=/etc/pam.d/omarchy-lock-face
 
 plugin_root="$HOME/.config/omarchy/plugins/surface.lock"
 plugins_root="$HOME/.config/omarchy/plugins"
-for manifest in "$plugins_root"/*/manifest.json; do
-  [[ -f "$manifest" ]] || continue
-  [[ "$(dirname "$manifest")" == "$plugin_root" ]] && continue
-  if python3 - "$manifest" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-try:
-    data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError):
-    raise SystemExit(1)
-raise SystemExit(0 if data.get("omarchy", {}).get("clonedFrom") == "omarchy.lock" else 1)
-PY
-  then
-    die "Another Omarchy lock clone is installed at $(dirname "$manifest"). Disable it before installing this lock plugin."
-  fi
-done
+if ! python3 "$root/scripts/check-lock-plugin-clones.py" "$plugins_root" "$plugin_root"; then
+  die "Another Omarchy lock clone is installed. Disable it before installing this lock plugin."
+fi
 
 if [[ -e "$plugin_root" ]]; then
   backup_and_report "$plugin_root"
+  [[ -e "$plugin_root/FaceAttemptPolicy.js" ]] || mark_new_path "$plugin_root/FaceAttemptPolicy.js"
 else
   install -d -m 0755 "$plugin_root"
   mark_new_path "$plugin_root/manifest.json"
   mark_new_path "$plugin_root/Service.qml"
   mark_new_path "$plugin_root/LockView.qml"
+  mark_new_path "$plugin_root/FaceAttemptPolicy.js"
 fi
 
 install -d -m 0755 "$plugin_root"
 install -m 0644 "$root/assets/omarchy-lock/manifest.json" "$plugin_root/manifest.json"
 install -m 0644 "$root/assets/omarchy-lock/Service.qml" "$plugin_root/Service.qml"
 install -m 0644 "$root/assets/omarchy-lock/LockView.qml" "$plugin_root/LockView.qml"
+install -m 0644 "$root/assets/omarchy-lock/FaceAttemptPolicy.js" "$plugin_root/FaceAttemptPolicy.js"
 
-info "Installed the face-first lock plugin at $plugin_root"
+info "Installed the one-shot face lock plugin at $plugin_root"
 printf 'Reload with: omarchy restart shell\n'

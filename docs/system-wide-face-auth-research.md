@@ -2,11 +2,11 @@
 
 > 调研日期：2026-10-05。本文是待审方案；本轮只读取配置和上游资料，没有修改系统认证、安装软件或启用新入口。目标是在适用的本机认证场景中提供一致的人脸与密码选择，而不是声称 Linux/Howdy 能复制 Windows Hello 的全部安全架构。
 
-> 状态更新（2026-10-05）：经用户批准，Polkit 的同意按钮、PAM helper 和 PAM 覆盖已在项目中实现；本机实测发现全屏代理未注册且 Polkit helper 的设备隔离阻止访问红外摄像头。当前项目已加入针对 Quickshell 0.3.1 的上游会话注册修复包，并将摄像头访问规则纳入安装与回滚。源码测试、补丁应用和 PKGBUILD 元数据检查已通过；需要在目标机器安装本地 Quickshell 包、重装 Polkit 配置并做图形实测后，才能标记 Polkit 场景完成。下文中的“待审方案”描述的是原调研时状态。
+> 状态更新（2026-10-06）：本仓库加入锁屏人脸一次性尝试策略：secure 后需新的用户意图，单次最长 12 秒，失败需显式重试；Polkit 失败反馈回到密码框。`tests/run.sh` 自动化检查通过。此次变更没有部署到本机；锁屏相机次数、休眠中断、Polkit 图形回退和终端实时体验均仍待 Surface Laptop 5 实测。Surface Laptop 8 未验证。下方 2026-10-05 的“自动锁屏扫描”描述是旧决策，已由本段和“当前状态”表格取代。
 
 ## 结论
 
-目前锁屏和交互式终端 `sudo` 已在本机验证。图形程序弹出的全屏管理员密码框属于 **Polkit**：Omarchy 的 Quickshell 授权界面接收 Polkit 请求，Polkit 再通过名为 `polkit-1` 的 PAM 服务认证。它不调用 `sudo`，所以现有的 `sudo` 人脸设置对这个场景无效。这是第三种场景仍只显示密码的直接原因。
+旧版锁屏行为和交互式终端 `sudo` 曾在本机验证；本次锁屏一次性触发改动尚未实测。图形程序弹出的全屏管理员密码框属于 **Polkit**：Omarchy 的 Quickshell 授权界面接收 Polkit 请求，Polkit 再通过名为 `polkit-1` 的 PAM 服务认证。它不调用 `sudo`，所以现有的 `sudo` 人脸设置对这个场景无效。这是第三种场景仍只显示密码的直接原因。
 
 下一步应把“明确选择人脸或密码”做成 Polkit 的完整认证流程：Omarchy 图形提示提供两个清晰入口；PAM 层在收到明确的人脸选择**之后**才启动 Howdy；拒绝、超时、摄像头故障和识别失败均回到密码。不能仅在图形上增加按钮，因为 Quickshell 收到请求时就会启动 PAM 会话；如果 PAM 直接运行 Howdy，摄像头会在用户点击前启动。[Quickshell 0.3.1 Polkit 流程](https://quickshell.org/docs/v0.3.1/types/Quickshell.Services.Polkit/)说明了这一时序。
 
@@ -16,7 +16,7 @@
 
 | 入口 | 本机观察 | 影响 |
 | --- | --- | --- |
-| Omarchy 锁屏 | 用户插件调用独立的 `omarchy-lock-face` PAM，保留密码服务；此前实机验证人脸与密码双向切换 | 已满足当前使用方式；锁屏可自动尝试人脸，因为用户对锁屏明确接受了这种交互 |
+| Omarchy 锁屏 | 用户插件调用独立的 `omarchy-lock-face` PAM，保留密码服务；旧版曾实机验证 | 旧版“锁屏自动尝试/失败持续重试”已废弃；新实现要求 secure 后的用户意图，单次最长 12 秒，失败后显式重试；新行为尚未实机验证 |
 | 终端 `sudo` | `/etc/pam.d/sudo` 调用本项目的同意 helper；用户已验证 `n` 走密码、`y` 显示 `Identified face` | 已满足“管理员操作先明确同意”的要求；成功认证可能被 `sudo` 缓存 |
 | 图形管理员提示 | Omarchy 4.0.4 的 `/usr/share/omarchy/shell/plugins/polkit/PolkitAgent.qml` 使用全屏 `PanelWindow`，当前把输入交给 `AuthFlow.submit()`，界面只有密码交互 | 需要改 Omarchy 用户插件及 Polkit PAM；全屏外观本身不是故障 |
 | Polkit PAM | 本机仅有软件包提供的 `/usr/lib/pam.d/polkit-1`，其 `auth` 直接包含 `system-auth`；尚无 `/etc/pam.d/polkit-1` | 当前走通用密码认证，未接入 Howdy。Linux-PAM 允许用同名 `/etc/pam.d/` 文件覆盖 vendor 文件，实施时应保留原件与回滚路径，不能直接改 `/usr/lib`。[Linux-PAM 配置手册](https://man7.org/linux/man-pages/man5/pam.conf.5.html) |
@@ -28,7 +28,7 @@
 
 | 场景与例子 | 实际入口 | 拟采用的行为 / 边界 |
 | --- | --- | --- |
-| 锁屏、空闲后恢复 | Omarchy 锁屏 + 专用 PAM | 保持现有自动人脸及密码切换；继续做回归测试。 |
+| 锁屏、空闲后恢复 | Omarchy 锁屏 + 专用 PAM | 新锁屏行为：锁定/secure 本身不启动摄像头；新的用户操作或用户唤醒插件熄灭的屏幕后触发一次识别；失败后只允许显式重试，密码可立即中断。 |
 | 终端 `sudo`、经 `sudo` 安装软件 | `sudo` PAM | 保持现有 `[y/N]` 同意；无控制终端时保留密码或由调用程序自身处理。缓存未到期时不弹框属于正常行为。 |
 | 图形软件安装、磁盘挂载/格式化、网络或系统设置、服务管理等**要求管理员授权的动作** | 如该动作通过 Polkit，则是 `polkit-1` PAM + 图形认证代理 | 目标是统一出现“使用人脸 / 使用密码”；只对确实走 Polkit 且要求认证的动作生效。已有授权或政策允许的动作不会弹框。 |
 | `pkexec`、桌面外的 Polkit 请求 | Polkit，可能使用文本代理 `pkttyagent` | 若 PAM 对话在文本代理中可用，允许文本选择；否则安全地回退密码。不能假设 Omarchy 图形按钮总在场。 |

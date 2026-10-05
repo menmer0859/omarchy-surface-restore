@@ -16,7 +16,7 @@ Restore the touchscreen and IR face unlock on Microsoft Surface devices running 
 | IR face authentication | Howdy 2.6.1 development package (`howdy-git`) |
 | Lock screen | Omarchy Quickshell lock plugin with separate Howdy PAM service |
 
-Other Surface models and Omarchy releases may differ. The touchscreen path uses the upstream linux-surface Arch repository. The lock-screen clone was tested on Omarchy 4.0.4 and will ask before proceeding on another version.
+Other Surface models and Omarchy releases may differ. The touchscreen path uses the upstream linux-surface Arch repository. The earlier lock-screen behavior was tested on Omarchy 4.0.4. The one-shot user-intent behavior described below has automated coverage but still needs a fresh Surface Laptop 5 hardware check; the installer asks before proceeding on another Omarchy version.
 
 ## Quick start
 
@@ -50,7 +50,9 @@ The touch path downloads the upstream signing key and checks its fingerprint (`8
 
 The face path requires an AUR helper (`yay` or `paru`) and `v4l-utils`. Review the helper's package prompts. The installer lists stable V4L2 paths; use `v4l2-ctl --list-devices` and Howdy's camera test to identify the IR node, then enter its number. If the camera is not in `/dev/v4l/by-path`, stop and investigate device permissions instead of guessing `/dev/video0`. If another user plugin already clones the Omarchy lock plugin, disable it first to avoid two plugins replacing the same lock screen.
 
-Howdy enrollment runs locally and stores the model under `/etc/howdy/models/`. Model files are excluded from Git. The installer makes the selected model readable by the local account that the lock screen runs as, while keeping it root-owned. The lock screen starts in face mode when a model is present and offers a visible button to switch to password. Choosing face again restarts recognition. Password PAM configuration is not edited.
+Howdy enrollment runs locally and stores the model under `/etc/howdy/models/`. Model files are excluded from Git. The installer makes the selected model readable by the local account that the lock screen runs as, while keeping it root-owned. The lock screen does not start the camera when locking, when its secure state arrives, or when it checks the model. After the secure lock is visible, a new key press, click/touch, or user input that wakes a display blanked by this plugin can request one face scan, limited to 12 seconds. Bright-screen pointer movement, key release, display changes, and preview do not start a scan. Failure stops the scan; use **Retry face** or explicitly choose face again to retry. **Use password** remains available and interrupts an active face scan. Password PAM configuration is not edited.
+
+To update an existing plugin, run `./scripts/install-lock-ui.sh` and then `omarchy restart shell`. The installer snapshots the existing plugin first; `./scripts/restore.sh` can restore that snapshot and remove `FaceAttemptPolicy.js` if the old plugin did not contain it.
 
 Terminal sudo face authentication is a separate opt-in step. After `face` has enrolled a model, run `./install.sh sudo-face`. Whenever sudo requests authentication, the controlling terminal displays `Use face authentication? [y/N]`; only typing `y` or `Y` starts Howdy. Enter, any other input, timeout, unavailable terminal, or failed recognition continues through the existing password authentication. The setup is limited to `/etc/pam.d/sudo` and the root-owned `/usr/local/libexec/omarchy-sudo-face-consent` helper. It carries the existing faillock pre-authentication and success options into the sudo flow; it does not change `system-auth`, `su`, desktop login, or lock-screen behavior. The sudo PAM file and any replaced helper are backed up. Use `./scripts/restore.sh` to restore them; if the helper did not exist before installation, restore removes it.
 
@@ -75,7 +77,7 @@ Trigger a graphical action that asks for administrator authentication, or run `p
 
 Use `./scripts/restore.sh` and select the pre-installation snapshot to undo this feature. The snapshot restores or removes `/etc/pam.d/polkit-1`, `/usr/local/lib/security/pam_surface_face_consent.so`, the systemd camera rule, and user plugin files created by the installer.
 
-Validated on a Surface Laptop 5 running Omarchy: after restarting the shell, `pkexec /usr/bin/id` opened the fullscreen Omarchy dialog; choosing **Use face** started the infrared camera and authorized the command as root.
+Historical Surface Laptop 5 validation: after restarting the shell, `pkexec /usr/bin/id` opened the fullscreen Omarchy dialog; choosing **Use face** started the infrared camera and authorized the command as root. The current password-fallback feedback change still needs a fresh graphical hardware check.
 
 If `pkexec` displays only the text prompt `Use face authentication? [y/N]` and no fullscreen dialog, Quickshell may be unable to infer the graphical session from its systemd user-service cgroup. This project includes a local Arch package for upstream [Quickshell PR #875](https://github.com/quickshell-mirror/quickshell/pull/875), based on Arch's 0.3.1 recipe. Build and install it from the repository root:
 
@@ -105,7 +107,7 @@ For face unlock, reload the Omarchy shell and lock the screen:
 omarchy restart shell
 ```
 
-The first screen should say “请面向摄像头” and begin recognition. Use “使用密码解锁” to enter the account password; switch back with “使用人脸解锁”. Confirm the fallback password works before relying on face recognition.
+The secure lock should initially say “已锁定。点击或按键使用人脸” without starting the camera. Press a key or click/touch to request one scan; after failure, choose “重试人脸” for another attempt or “使用密码” to enter the account password. Confirm password unlock before relying on face recognition.
 
 ## What the installer changes
 

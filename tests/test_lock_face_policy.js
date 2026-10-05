@@ -118,4 +118,18 @@ function startSecureLock(state) {
   assert.equal(result.state.phase, 'failed');
 }
 
+{
+  let state = startSecureLock(createState());
+  let result = send(state, 'INTENT', { lockId: state.lockId });
+  const firstLockId = result.state.lockId;
+  result = send(result.state, 'UNLOCKED', { lockId: firstLockId });
+  state = startSecureLock(result.state);
+  result = send(state, 'INTENT', { lockId: state.lockId });
+
+  const staleUnlock = send(result.state, 'UNLOCKED', { lockId: firstLockId });
+  assert.deepEqual(staleUnlock.effects, []);
+  assert.equal(staleUnlock.state.phase, 'scanning');
+  assert.ok(staleUnlock.state.lockId > firstLockId);
+}
+
 console.log('Lock face policy tests passed.');

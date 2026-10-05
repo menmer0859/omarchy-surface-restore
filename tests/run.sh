@@ -14,6 +14,7 @@ bash -n scripts/sudo-face-consent
 python3 -m py_compile scripts/configure-sudo-pam.py
 python3 -m py_compile scripts/configure-polkit-pam.py
 python3 -m py_compile scripts/render-polkit-device-access.py
+python3 -m py_compile scripts/check-lock-plugin-clones.py
 python3 -m py_compile scripts/omarchy-polkit-howdy.py
 
 module_dir=$(mktemp -d)
