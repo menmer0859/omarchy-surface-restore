@@ -33,6 +33,7 @@ Item {
   property bool failed: false
   // Set only after the user explicitly chooses face authentication.
   property bool faceCheckPending: false
+  property bool faceFallbackActive: false
   property bool errorFlash: false
   // pam_fprintd appears in the polkit PAM stack (a sensor is enrolled).
   property bool fingerprintConfigured: false
@@ -42,7 +43,7 @@ Item {
   property int shakeOffset: 0
 
   readonly property bool dialogVisible: polkitAgent.isActive || closing
-  readonly property bool faceConsentMode: dialogVisible && responseRequired && PolkitModel.isFaceConsentPrompt(currentPrompt)
+  readonly property bool faceConsentMode: dialogVisible && responseRequired && PolkitModel.isFaceConsentPrompt(currentPrompt) && !faceFallbackActive
   readonly property var activeIdentity: polkitAgent.flow ? polkitAgent.flow.selectedIdentity : null
   readonly property var allowedIdentities: polkitAgent.flow ? polkitAgent.flow.identities : []
   // We show one method at a time. Fingerprint owns the dialog while PAM is
@@ -92,6 +93,7 @@ Item {
     errorFlash = false
     submitted = false
     faceCheckPending = false
+    faceFallbackActive = false
     passwordInput.text = ""
   }
 
@@ -106,7 +108,11 @@ Item {
     responseVisible = !!flow.responseVisible
     failed = !!flow.failed
 
-    if (responseRequired && !PolkitModel.isFaceConsentPrompt(currentPrompt)) faceCheckPending = false
+    if (responseRequired && !PolkitModel.isFaceConsentPrompt(currentPrompt)) {
+      if (faceCheckPending) faceFallbackActive = true
+      faceCheckPending = false
+      faceFallbackActive = faceFallbackActive && currentPrompt.toLowerCase().indexOf("password") !== -1
+    }
     if (responseRequired) submitted = false
   }
 
@@ -114,6 +120,8 @@ Item {
     closeTimer.stop()
     closing = false
     submitted = false
+    faceFallbackActive = false
+    faceCheckPending = false
     passwordInput.text = ""
     refreshLidState()
     syncFromFlow()
@@ -131,6 +139,7 @@ Item {
   function submitFaceConsent(useFace) {
     var flow = polkitAgent.flow
     if (!flow || !flow.isResponseRequired || !PolkitModel.isFaceConsentPrompt(currentPrompt)) return
+    faceFallbackActive = false
     faceCheckPending = useFace
     submitted = true
     passwordInput.text = ""
@@ -147,6 +156,7 @@ Item {
     }
     submitted = true
     errorFlash = false
+    faceFallbackActive = false
     flow.submit(passwordInput.text)
     passwordInput.text = ""
     keyCatcher.forceActiveFocus()
@@ -163,6 +173,8 @@ Item {
 
   function triggerFailureFeedback() {
     submitted = false
+    faceFallbackActive = faceFallbackActive || faceCheckPending
+    faceCheckPending = false
     errorFlash = true
     passwordInput.text = ""
     errorTimer.restart()
@@ -373,7 +385,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: root.errorFlash ? "Wrong" : (root.submitted ? "Checking..." : "Enter password")
+            text: root.errorFlash ? (root.faceFallbackActive ? "Face recognition failed. Enter password." : "Wrong") : (root.submitted ? "Checking..." : (root.faceFallbackActive ? "Face recognition failed. Enter password." : "Enter password"))
             color: root.errorFlash ? Color.polkit.textError : root.foreground
             opacity: root.errorFlash ? 1 : 0.36
             font.family: root.fontFamily

@@ -11,7 +11,7 @@ from pathlib import Path
 HELPER = Path(__file__).resolve().parents[1] / "scripts" / "sudo-face-consent"
 
 
-def run_with_controlling_tty(answer: bytes) -> tuple[int, bytes]:
+def run_with_controlling_tty(answer: bytes | None) -> tuple[int, bytes]:
     child, terminal = pty.fork()
     if child == 0:
         os.execv(HELPER, [str(HELPER)])
@@ -29,7 +29,7 @@ def run_with_controlling_tty(answer: bytes) -> tuple[int, bytes]:
             if not chunk:
                 break
             output.extend(chunk)
-        if prompt in output:
+        if prompt in output and answer is not None:
             os.write(terminal, answer)
         while True:
             try:
@@ -97,6 +97,7 @@ class SudoFaceConsentTests(unittest.TestCase):
                 exit_code, output = run_with_controlling_tty(answer)
                 self.assertEqual(exit_code, 0)
                 self.assertIn(b"Use face authentication? [y/N]", output)
+                self.assertEqual(output.count(b"Use face authentication? [y/N]"), 1)
 
     def test_decline_and_other_inputs_do_not_accept_face_auth(self):
         for answer in (b"n\n", b"\n", b"yes\n"):
@@ -104,6 +105,13 @@ class SudoFaceConsentTests(unittest.TestCase):
                 exit_code, output = run_with_controlling_tty(answer)
                 self.assertNotEqual(exit_code, 0)
                 self.assertIn(b"Use face authentication? [y/N]", output)
+                self.assertEqual(output.count(b"Use face authentication? [y/N]"), 1)
+
+    def test_consent_timeout_defaults_to_password_path(self):
+        exit_code, output = run_with_controlling_tty(None)
+
+        self.assertNotEqual(exit_code, 0)
+        self.assertEqual(output.count(b"Use face authentication? [y/N]"), 1)
 
     def test_missing_controlling_tty_fails_closed(self):
         result = subprocess.run(
@@ -123,6 +131,7 @@ class SudoFaceConsentTests(unittest.TestCase):
 
         self.assertNotEqual(exit_code, 0)
         self.assertIn(b"Use face authentication? [y/N]", output)
+        self.assertEqual(output.count(b"Use face authentication? [y/N]"), 1)
 
     def test_explicit_consent_works_after_pam_exec_starts_a_new_session(self):
         exit_code, output = run_with_pam_tty_without_controlling_tty(b"y\n")
