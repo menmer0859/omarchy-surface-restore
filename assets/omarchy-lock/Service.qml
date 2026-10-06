@@ -572,8 +572,8 @@ Item {
                 }
             }
         }
-        onErrorOccurred: function (error) {
-            root.logEvent("suspend-monitor-error=" + error);
+        onExited: function (exitCode, exitStatus) {
+            root.logEvent("suspend-monitor-exit code=" + exitCode + " status=" + exitStatus);
         }
     }
 

@@ -4,7 +4,7 @@
 
 > 运行前请先阅读脚本。安装器会安装系统软件并修改配置文件；密码解锁会保留，人脸识别只是额外入口。
 
-实机验证基线：Surface Laptop 5、Omarchy 4.0.4、linux-surface 6.19.8、iptsd 3.1.0、Howdy `howdy-git` 2.6.1 开发版。旧版锁屏行为曾在 Omarchy 4.0.4 上实测；本次“一次用户意图触发一次识别”的改动目前只有自动化测试，仍需在 Surface Laptop 5 实机复验。其他 Surface 型号和 Omarchy 版本不视为已支持。
+实机验证基线：Surface Laptop 5、Omarchy 4.0.4、linux-surface 6.19.8、iptsd 3.1.0、Howdy `howdy-git` 2.6.1 开发版。项目负责人反馈：修正 Quickshell `Process` 退出信号后，一次用户意图触发的人脸锁屏已在本机运行，锁屏现可正常响应；完整相机时序、休眠和 Polkit 密码回退验收尚未记录。其他 Surface 型号和 Omarchy 版本不视为已支持。
 
 ## 快速开始
 
@@ -114,6 +114,6 @@ omarchy restart shell
 bash tests/run.sh
 ```
 
-测试只使用临时文件，不安装软件或改动系统配置。真实触摸和人脸识别仍需在目标 Surface 上人工确认。
+自动化测试只使用临时文件，不安装软件或改动系统配置。锁屏基础运行已由项目负责人在 Surface Laptop 5 本机确认；完整硬件验收矩阵仍需逐项记录。
 
 完整实机记录见 [docs/verified-surface-laptop-5.md](docs/verified-surface-laptop-5.md)。软件和硬件项目来源列在英文 [README](README.md#upstream-references) 中。

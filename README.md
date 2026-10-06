@@ -16,7 +16,7 @@ Restore the touchscreen and IR face unlock on Microsoft Surface devices running 
 | IR face authentication | Howdy 2.6.1 development package (`howdy-git`) |
 | Lock screen | Omarchy Quickshell lock plugin with separate Howdy PAM service |
 
-Other Surface models and Omarchy releases may differ. The touchscreen path uses the upstream linux-surface Arch repository. The earlier lock-screen behavior was tested on Omarchy 4.0.4. The one-shot user-intent behavior described below has automated coverage but still needs a fresh Surface Laptop 5 hardware check; the installer asks before proceeding on another Omarchy version.
+Other Surface models and Omarchy releases may differ. The touchscreen path uses the upstream linux-surface Arch repository. The one-shot lock plugin was smoke-tested by the project owner on Surface Laptop 5 after correcting the Quickshell `Process` exit handler; they report the lock screen now responds normally. The full camera timing, suspend, and Polkit fallback matrix has not been recorded. The installer asks before proceeding on another Omarchy version.
 
 ## Quick start
 

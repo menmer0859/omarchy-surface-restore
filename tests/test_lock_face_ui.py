@@ -139,6 +139,10 @@ class LockFaceUiTests(unittest.TestCase):
         self.assertIn('type: "SUSPEND"', self.service)
         self.assertIn("member=PrepareForSleep", self.service)
         self.assertIn("boolean true", self.service)
+        process_start = self.service.rfind("Process {", 0, self.service.index("id: suspendEventProc"))
+        suspend_monitor = qml_block(self.service[process_start:], "Process")
+        self.assertIn("onExited: function (exitCode, exitStatus)", suspend_monitor)
+        self.assertNotIn("onErrorOccurred", suspend_monitor)
 
 
 if __name__ == "__main__":
