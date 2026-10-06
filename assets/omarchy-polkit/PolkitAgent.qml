@@ -70,6 +70,8 @@ Item {
     var index = PolkitModel.nextIdentityIndex(flow.identities, flow.selectedIdentity)
     if (index < 0) return
     passwordInput.text = ""
+    faceFallbackActive = false
+    faceCheckPending = false
     flow.selectedIdentity = flow.identities[index]
     Qt.callLater(syncFromFlow)
     Qt.callLater(refocus)

@@ -77,7 +77,7 @@ Trigger a graphical action that asks for administrator authentication, or run `p
 
 Use `./scripts/restore.sh` and select the pre-installation snapshot to undo this feature. The snapshot restores or removes `/etc/pam.d/polkit-1`, `/usr/local/lib/security/pam_surface_face_consent.so`, the systemd camera rule, and user plugin files created by the installer.
 
-Historical Surface Laptop 5 validation: after restarting the shell, `pkexec /usr/bin/id` opened the fullscreen Omarchy dialog; choosing **Use face** started the infrared camera and authorized the command as root. The current password-fallback feedback change still needs a fresh graphical hardware check.
+The project owner reports that the repaired version runs locally and the feature works. A full camera timing, suspend/resume, and Polkit identity-switch acceptance matrix is not recorded.
 
 If `pkexec` displays only the text prompt `Use face authentication? [y/N]` and no fullscreen dialog, Quickshell may be unable to infer the graphical session from its systemd user-service cgroup. This project includes a local Arch package for upstream [Quickshell PR #875](https://github.com/quickshell-mirror/quickshell/pull/875), based on Arch's 0.3.1 recipe. Build and install it from the repository root:
 

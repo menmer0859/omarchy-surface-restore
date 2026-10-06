@@ -97,6 +97,12 @@ class PolkitUiTests(unittest.TestCase):
         self.assertIn("PolkitModel.identityLabel", source)
         self.assertIn("flow.selectedIdentity =", source)
 
+    def test_switching_identity_clears_the_previous_faces_password_fallback(self):
+        source = (ASSET / "PolkitAgent.qml").read_text(encoding="utf-8")
+        cycle = qml_function(source, "cycleIdentity")
+        self.assertIn("faceFallbackActive = false", cycle)
+        self.assertIn("faceCheckPending = false", cycle)
+
     def test_identity_label_disambiguates_users_and_groups(self):
         result = subprocess.run(
             [
