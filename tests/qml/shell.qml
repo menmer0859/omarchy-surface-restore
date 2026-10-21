@@ -28,6 +28,11 @@ ShellRoot {
      suite.check(admin.faceLabel === "Use face", "English admin consent");
      var face = suite.findItem(admin, "faceAction"); suite.check(!!face, "face action exists"); face.clicked(); suite.check(suite.faceChosen, "explicit face consent");
      suite.findItem(admin, "passwordAction").clicked(); suite.check(suite.passwordChosen, "password fallback choice");
+     admin.visible = true; admin.scanning = true;
+     suite.check(!suite.findItem(admin, "passwordAction").visible, "busy Polkit cannot offer unsupported password switch");
+     admin.scanning = false; admin.consentMode = false; admin.fingerprintMode = true;
+     suite.check(!suite.findItem(admin, "passwordAction").visible, "fingerprint busy cannot offer unsupported password switch");
+     admin.fingerprintMode = false; admin.consentMode = true; admin.visible = false;
      Commons.I18n.setLanguage("zh-CN"); suite.step = 1;
     } else if (suite.step === 1) {
      suite.check(lock.stateTitle === "等待你的操作", "live Chinese lock title");

@@ -24,7 +24,12 @@ fi
 
 # Read only a bounded display-language code from the authenticating user's
 # Omarchy preference. Python isolated mode ignores PYTHONPATH and user site code.
-locale_helper="$(dirname -- "${BASH_SOURCE[0]}")/omarchy-face-auth-locale"
+# PAM invokes an absolute root-owned path. Derive its sibling using only
+# shell builtins: inherited PATH must never choose a privileged Python program.
+case "${BASH_SOURCE[0]}" in
+  /*) locale_helper="${BASH_SOURCE[0]%/*}/omarchy-face-auth-locale" ;;
+  *) locale_helper=/usr/local/libexec/omarchy-face-auth-locale ;;
+esac
 prompt='Use face authentication? [y/N] '
 if [[ -f "$locale_helper" ]]; then
   translated=$(/usr/bin/python3 -I "$locale_helper" --user "${PAM_USER:-${SUDO_USER:-}}" 2>/dev/null) && prompt=$translated

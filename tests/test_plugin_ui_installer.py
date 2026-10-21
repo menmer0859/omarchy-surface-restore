@@ -47,6 +47,17 @@ exec "$@"
             self.assertFalse((plugin/'i18n').exists())
             self.assertEqual(json.loads((plugin/'manifest.json').read_text())['version'],'1.1.0')
 
+    def test_symlink_manifest_is_rejected_before_external_target_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, plugin, env=self.fixture(directory)
+            outside=base/'outside.json'; outside.write_bytes((plugin/'manifest.json').read_bytes())
+            original=outside.read_bytes()
+            (plugin/'manifest.json').unlink(); (plugin/'manifest.json').symlink_to(outside)
+            result=subprocess.run(['bash',str(ROOT/'scripts/install-plugin-ui.sh')],input='y\n',env=env,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual(outside.read_bytes(),original)
+            self.assertFalse((base/'backups').exists())
+
     def test_active_lock_is_rejected_before_backups_or_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             base, plugin, env = self.fixture(directory); env['TEST_LOCK_STATE']='true'

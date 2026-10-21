@@ -13,6 +13,7 @@ pam_file=/etc/pam.d/omarchy-lock-face
 
 plugin_root="$HOME/.config/omarchy/plugins/surface.lock"
 plugins_root="$HOME/.config/omarchy/plugins"
+python3 "$root/scripts/deploy-face-ui.py" lock "$plugin_root" --check
 if ! python3 "$root/scripts/check-lock-plugin-clones.py" "$plugins_root" "$plugin_root"; then
   die "Another Omarchy lock clone is installed. Disable it before installing this lock plugin."
 fi

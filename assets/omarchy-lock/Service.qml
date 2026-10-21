@@ -1,5 +1,6 @@
 import QtQuick
 import "FaceAttemptPolicy.js" as FaceAttemptPolicy
+import "DisplayWakePolicy.js" as DisplayWakePolicy
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
@@ -32,6 +33,7 @@ Item {
     property int facePamAttemptId: 0
     property double faceAttemptStartedAt: 0
     property bool displayBlanked: false
+    property var monitorWakeState: DisplayWakePolicy.createState()
     property bool suspendSignalPending: false
     property string unlockMode: "password"
     property bool previewVisible: false
@@ -222,6 +224,7 @@ Item {
         }
 
         resetAuthenticationState();
+        invalidateMonitorObservations();
         applyFaceEvent({ type: "LOCK_REQUESTED", faceAvailable: faceConfigured });
         unlockMode = faceConfigured ? "face" : "password";
         lockRequested = true;
@@ -241,6 +244,7 @@ Item {
     function finishUnlock() {
         if (!root.locked && !lockRequested)
             return;
+        invalidateMonitorObservations();
         applyFaceEvent({ type: "UNLOCKED" });
         lockRequested = false;
         pendingSessionLock = false;
@@ -258,7 +262,12 @@ Item {
         idleBlankTimer.restart();
     }
 
+    function invalidateMonitorObservations() {
+        monitorWakeState = DisplayWakePolicy.invalidate(monitorWakeState);
+    }
+
     function runWake() {
+        if (displayBlanked) invalidateMonitorObservations();
         displayBlanked = false;
         if (!wakeProcess.running)
             wakeProcess.running = true;
@@ -270,12 +279,14 @@ Item {
         if (!lockRequested)
             return;
         var wasBlank = displayBlanked;
+        var confirmedOff = monitorWakeState.offObserved;
         runWake();
-        if (wasBlank) applyFaceEvent({ type: "SCREEN_WOKE" });
+        if (wasBlank) applyFaceEvent({ type: confirmedOff ? "SCREEN_WOKE" : "DISPLAY_ACTIVE" });
     }
 
     function runBlank() {
         if (!blankProcess.running) {
+            invalidateMonitorObservations();
             applyFaceEvent({ type: "DISPLAY_BLANKED" });
             displayBlanked = true;
             blankProcess.running = true;
@@ -608,10 +619,12 @@ Item {
                     root.suspendSignalPending = true;
                 } else if (root.suspendSignalPending && line.indexOf("boolean true") >= 0) {
                     root.suspendSignalPending = false;
+                    root.invalidateMonitorObservations();
                     root.displayBlanked = true;
                     root.applyFaceEvent({ type: "SUSPEND" });
                 } else if (root.suspendSignalPending && line.indexOf("boolean false") >= 0) {
                     root.suspendSignalPending = false;
+                    root.invalidateMonitorObservations();
                     root.applyFaceEvent({ type: "RESUME" });
                 }
             }
@@ -701,27 +714,44 @@ Item {
         command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
     }
 
-    function applyMonitorState(raw) {
+    function applyMonitorState(raw, sampleLockId, sampleEpoch) {
+        if (!lockRequested || sampleLockId !== facePolicyState.lockId) return;
         var monitors;
         try { monitors = JSON.parse(raw); } catch (error) { return; }
-        if (!Array.isArray(monitors) || !monitors.length) return;
-        var active = monitors.some(function(m) { return !m.disabled && m.dpmsStatus === true; });
-        var known = monitors.some(function(m) { return typeof m.dpmsStatus === "boolean"; });
-        if (!known || !lockRequested) return;
-        if (!active && !displayBlanked) { displayBlanked = true; applyFaceEvent({type: "DISPLAY_BLANKED"}); }
-        else if (active && displayBlanked && !blankProcess.running) handleWakeRequested();
+        var result = DisplayWakePolicy.observe(monitorWakeState, sampleEpoch, monitors);
+        monitorWakeState = result.state;
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "DISPLAY_BLANKED") {
+                displayBlanked = true;
+                applyFaceEvent({ type: "DISPLAY_BLANKED" });
+            } else if (result.effects[i] === "SCREEN_WOKE") {
+                runWake();
+                applyFaceEvent({ type: "SCREEN_WOKE" });
+            }
+        }
     }
 
     Process {
         id: monitorState
+        property int sampleLockId: 0
+        property int sampleEpoch: 0
         command: ["hyprctl", "monitors", "-j"]
-        stdout: StdioCollector { onStreamFinished: root.applyMonitorState(text) }
+        stdout: StdioCollector { id: monitorOutput; waitForEnd: true }
+        onExited: function(code) {
+            if (code === 0) root.applyMonitorState(monitorOutput.text, sampleLockId, sampleEpoch);
+        }
     }
     Timer {
         interval: 1000
         repeat: true
         running: root.lockRequested
-        onTriggered: if (!monitorState.running) monitorState.running = true
+        onTriggered: {
+            if (!monitorState.running && !blankProcess.running) {
+                monitorState.sampleLockId = root.facePolicyState.lockId;
+                monitorState.sampleEpoch = root.monitorWakeState.epoch;
+                monitorState.running = true;
+            }
+        }
     }
     onFacePhaseChanged: {
         if (facePhase === "scanning" || facePhase === "wake_delay") idleBlankTimer.stop();

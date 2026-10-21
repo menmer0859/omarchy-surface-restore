@@ -1,4 +1,13 @@
 
+function isIntentKey(key, modifiers, autoRepeat, keys) {
+    if (autoRepeat || (modifiers & (keys.ControlModifier | keys.AltModifier | keys.MetaModifier))) return false;
+    var ignored = [keys.Key_Tab, keys.Key_Backtab, keys.Key_Shift, keys.Key_Control,
+        keys.Key_Alt, keys.Key_Meta, keys.Key_AltGr, keys.Key_CapsLock,
+        keys.Key_NumLock, keys.Key_ScrollLock, keys.Key_Super_L, keys.Key_Super_R,
+        keys.Key_Hyper_L, keys.Key_Hyper_R];
+    return ignored.indexOf(key) === -1;
+}
+
 function createState() {
     return {
         phase: "inactive",
@@ -129,6 +138,12 @@ function transition(state, event) {
         if (state.phase === "scanning" || state.phase === "wake_delay") next.phase = "locked_idle";
         break;
 
+    case "DISPLAY_ACTIVE":
+        // An optimistic blank request is not proof the hardware went off.
+        // Clear it on user activity without scheduling an automatic scan.
+        if (state.phase !== "inactive" && !state.suspended && matchesLock(state, event)) next.blank = false;
+        break;
+
     case "SCREEN_WOKE":
     case "RESUME":
         if (state.phase === "inactive" || !matchesLock(state, event)) break;
@@ -166,4 +181,4 @@ function transition(state, event) {
 }
 
 if (typeof module !== "undefined" && module.exports)
-    module.exports = { createState: createState, transition: transition };
+    module.exports = { createState: createState, transition: transition, isIntentKey: isIntentKey };

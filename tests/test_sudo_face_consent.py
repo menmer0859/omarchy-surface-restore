@@ -13,9 +13,10 @@ from pathlib import Path
 HELPER = Path(__file__).resolve().parents[1] / "scripts" / "sudo-face-consent"
 
 
-def run_with_controlling_tty(answer: bytes | None, helper=HELPER, prompt=b"Use face authentication? [y/N]") -> tuple[int, bytes]:
+def run_with_controlling_tty(answer: bytes | None, helper=HELPER, prompt=b"Use face authentication? [y/N]", extra_env=None) -> tuple[int, bytes]:
     child, terminal = pty.fork()
     if child == 0:
+        os.environ.update(extra_env or {})
         os.environ["PAM_USER"] = "surface-face-test-nonexistent-account"
         os.execv(helper, [str(helper)])
 
@@ -94,6 +95,17 @@ def run_with_pam_tty_without_controlling_tty(answer: bytes) -> tuple[int, bytes]
 
 
 class SudoFaceConsentTests(unittest.TestCase):
+    def test_hostile_path_cannot_select_a_locale_program(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory); fake=base/'bin'; fake.mkdir(); attacker=base/'attacker'; attacker.mkdir()
+            marker=base/'executed'
+            (fake/'dirname').write_text('#!/bin/bash\nprintf "%s\\n" "'+str(attacker)+'"\n')
+            (fake/'dirname').chmod(0o755)
+            (attacker/'omarchy-face-auth-locale').write_text("from pathlib import Path\nPath("+repr(str(marker))+").touch()\nprint('Use face authentication? [y/N] ',end='')\n")
+            code, output=run_with_controlling_tty(b'n\n',extra_env={'PATH':str(fake)+':'+os.environ['PATH']})
+            self.assertNotEqual(code,0)
+            self.assertFalse(marker.exists(), 'inherited PATH selected executable code')
+
     def test_chinese_prompt_and_guidance_on_a_real_terminal(self):
         # Substitute only the locale provider so this test never edits the host's
         # language preference. Its real parser/catalog behavior has separate tests.

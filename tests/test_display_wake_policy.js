@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict');
+let policy;
+try { policy=require('../assets/omarchy-lock/DisplayWakePolicy.js') } catch(e) { if(e.code!=='MODULE_NOT_FOUND') throw e }
+assert.ok(policy,'DPMS observations require a generation-aware policy');
+const on=[{name:'eDP-1',dpmsStatus:true}], off=[{name:'eDP-1',dpmsStatus:false}];
+let s=policy.createState();
+let r=policy.observe(s,s.epoch,on); assert.deepEqual(r.effects,[],'initial active monitor is not a wake');
+s=policy.invalidate(r.state); const beforeBlank=s.epoch;
+s=policy.invalidate(s);
+r=policy.observe(s,beforeBlank,on); assert.deepEqual(r.effects,[],'stale active snapshot cannot manufacture a wake');
+r=policy.observe(s,s.epoch,on); assert.deepEqual(r.effects,[],'failed blank command without off evidence is not a wake');
+r=policy.observe(s,s.epoch,off); assert.deepEqual(r.effects,['DISPLAY_BLANKED']); s=r.state;
+r=policy.observe(s,s.epoch,off); assert.deepEqual(r.effects,[],'duplicate off observation is inert');
+r=policy.observe(r.state,r.state.epoch,on); assert.deepEqual(r.effects,['SCREEN_WOKE']); s=r.state;
+r=policy.observe(s,s.epoch,on); assert.deepEqual(r.effects,[],'one on edge only');
+s=policy.observe(s,s.epoch,off).state; const old=s.epoch; s=policy.invalidate(s);
+assert.deepEqual(policy.observe(s,old,on).effects,[],'relock/suspend generation rejects old result');
+assert.deepEqual(policy.observe(s,s.epoch,[{name:'unknown'}]).effects,[],'unknown DPMS status is not off evidence');
+assert.deepEqual(policy.observe(s,s.epoch,[{disabled:true,dpmsStatus:false}]).effects,[],'disabled outputs are not evidence');
+assert.deepEqual(policy.observe(s,s.epoch,[...off,{name:'DP-1',dpmsStatus:true}]).effects,[],'one output asleep is not globally blank');
+console.log('Display wake sampling regression tests passed.');

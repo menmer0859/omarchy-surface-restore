@@ -93,9 +93,7 @@ class LockFaceUiTests(unittest.TestCase):
 
     def test_tab_keys_remain_available_for_retry_and_password_focus(self):
         key_handler = qml_block(self.view, "Keys.onPressed:")
-        self.assertIn("Qt.Key_Tab", key_handler)
-        self.assertIn("Qt.Key_Backtab", key_handler)
-        self.assertIn("Qt.Key_Backtab", key_handler)
+        self.assertIn("FaceAttemptPolicy.isIntentKey", key_handler)
 
     def test_blank_screen_pointer_motion_wakes_without_requesting_face_auth(self):
         self.assertIn("property bool displayBlanked: false", self.service, "display blank tracking must be present")

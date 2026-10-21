@@ -6,6 +6,7 @@ cd "$repo_root"
 export PYTHONDONTWRITEBYTECODE=1
 
 node tests/test_lock_face_policy.js
+node tests/test_display_wake_policy.js
 
 for script in install.sh scripts/*.sh tests/*.sh; do
   bash -n "$script"

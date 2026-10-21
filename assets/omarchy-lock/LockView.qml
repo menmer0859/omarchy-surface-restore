@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import qs.Commons as Commons
 import "FaceUi" as FaceUi
+import "FaceAttemptPolicy.js" as FaceAttemptPolicy
 
 Item {
     id: root
@@ -69,7 +70,7 @@ Item {
     LayoutMirroring.enabled: Commons.I18n.rightToLeft
     LayoutMirroring.childrenInherit: true
     Keys.onPressed: function (event) {
-        if (!inputEnabled || event.isAutoRepeat || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)))
+        if (!inputEnabled || !FaceAttemptPolicy.isIntentKey(event.key, event.modifiers, event.isAutoRepeat, Qt))
             return;
         if (!passwordMode)
             root.requestFaceIntent();

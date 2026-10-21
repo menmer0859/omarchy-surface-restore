@@ -60,6 +60,7 @@ FocusScope {
             margins: 32
         }
         administrative: true
+        passwordSwitchAvailable: root.consentMode && !root.scanning && !root.fingerprintMode
         userName: root.userName
         displayName: root.displayName
         avatarPath: root.avatarPath

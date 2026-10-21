@@ -21,6 +21,7 @@ plugin_manifest="$plugin_root/manifest.json"
 plugin_qml="$plugin_root/PolkitAgent.qml"
 plugin_model="$plugin_root/PolkitModel.js"
 plugins_root="$HOME/.config/omarchy/plugins"
+python3 "$root/scripts/deploy-face-ui.py" polkit "$plugin_root" --check
 model="/etc/howdy/models/$clone_user.dat"
 module_tmp=$(mktemp "${TMPDIR:-/tmp}/pam_surface_face_consent.XXXXXX.so")
 dropin_tmp=$(mktemp "${TMPDIR:-/tmp}/polkit-surface-camera.XXXXXX.conf")

@@ -5,6 +5,7 @@ import qs.Commons as Commons
 ColumnLayout {
     id: root
     property bool administrative: false
+    property bool passwordSwitchAvailable: true
     property string userName: ""
     property string displayName: ""
     property string avatarPath: ""
@@ -127,7 +128,7 @@ ColumnLayout {
         }
         Action {
             objectName: "passwordAction"
-            visible: !root.passwordMode
+            visible: !root.passwordMode && root.passwordSwitchAvailable
             label: strings.t("action.password")
             iconName: "password"
             onClicked: root.passwordRequested()

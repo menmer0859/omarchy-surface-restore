@@ -10,7 +10,7 @@ import tempfile
 def resources(repo: Path, kind: str) -> dict:
     if kind not in ('lock', 'polkit'):
         raise ValueError('unknown plugin kind')
-    names = ('Service.qml', 'LockView.qml', 'FaceAttemptPolicy.js', 'qmldir') if kind == 'lock' else ('PolkitAgent.qml', 'PolkitModel.js', 'AuthorizationView.qml', 'qmldir')
+    names = ('Service.qml', 'LockView.qml', 'FaceAttemptPolicy.js', 'DisplayWakePolicy.js', 'qmldir') if kind == 'lock' else ('PolkitAgent.qml', 'PolkitModel.js', 'AuthorizationView.qml', 'qmldir')
     result = {name: repo/'assets'/('omarchy-' + kind)/name for name in names}
     for source in sorted((repo/'assets/face-ui').iterdir()):
         if source.is_file() and (source.suffix == '.qml' or source.name == 'qmldir'):
@@ -21,6 +21,8 @@ def resources(repo: Path, kind: str) -> dict:
 
 
 def validate(destination: Path, paths: dict):
+    if (destination/'manifest.json').is_symlink():
+        raise ValueError('plugin manifest must be a regular non-symlink file')
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
         raise ValueError('plugin destination must be a regular directory')
     for relative, source in paths.items():

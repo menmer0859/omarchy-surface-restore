@@ -173,3 +173,11 @@ console.log('Lock face policy tests passed.');
  assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',{lockId:r.state.lockId,wakeId:r.state.wakeId}).effects, []);
 }
 console.log('Wake settling and cancellation tests passed.');
+
+assert.equal(typeof policy.isIntentKey, 'function', 'central intent key filter is required');
+const keys={Key_Tab:1,Key_Backtab:2,Key_Shift:3,Key_Control:4,Key_Alt:5,Key_Meta:6,Key_AltGr:7,Key_CapsLock:8,Key_NumLock:9,Key_ScrollLock:10,Key_Super_L:11,Key_Super_R:12,Key_Hyper_L:13,Key_Hyper_R:14,ControlModifier:2,AltModifier:4,MetaModifier:8};
+for (const name of ['Key_Shift','Key_Control','Key_Alt','Key_Meta','Key_AltGr','Key_CapsLock','Key_NumLock','Key_ScrollLock','Key_Tab','Key_Backtab']) assert.equal(policy.isIntentKey(keys[name],0,false,keys),false,name+' alone is not intent');
+assert.equal(policy.isIntentKey(65,1,false,keys),true,'ordinary shifted character is intent');
+assert.equal(policy.isIntentKey(65,2,false,keys),false,'Ctrl shortcut is not face intent');
+assert.equal(policy.isIntentKey(65,0,true,keys),false,'repeat is not fresh intent');
+console.log('Modifier-only face intent regression passed.');
