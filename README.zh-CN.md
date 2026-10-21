@@ -30,7 +30,7 @@ cd omarchy-surface-restore
 
 人脸配置需要 `yay` 或 `paru` 和 `v4l-utils`。请检查 AUR helper 展示的构建配方和软件变更。安装器会列出稳定摄像头路径，结合 `v4l2-ctl --list-devices` 或 Howdy 摄像头测试，选择红外摄像头。不要猜测 `/dev/video0`；摄像头编号可能改变。
 
-Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。模型文件不会上传或放进 Git。锁屏使用独立 PAM 服务，系统密码 PAM 不会被替换；进入 secure 后，新的按键、点击或触摸可启动一次识别，界面/PAM 请求在 12 秒后中止。鼠标移动只负责唤醒显示，不会启动相机；失败后必须显式重试。当前尚不能保证 PAM 中断时 Howdy 独立启动的识别进程立即退出，因此 12 秒计时器不代表摄像头最多只工作 12 秒。
+Howdy 会在本机录入人脸，并把模型保存在 `/etc/howdy/models/`。模型文件不会上传或放进 Git。锁屏使用独立 PAM 服务，系统密码 PAM 不会被替换；进入 secure 后，新的按键、点击或触摸可启动一次识别，界面/PAM 请求在 12 秒后中止。实际熄屏后唤醒会延迟 1.5 秒尝试一次识别；屏幕已亮时移动鼠标不会启动识别。失败后须显式重试或重新熄屏唤醒。当前尚不能保证 PAM 中断时 Howdy 独立启动的识别进程立即退出，因此 12 秒计时器不代表摄像头最多只工作 12 秒。
 
 终端 sudo 的人脸认证是单独的可选步骤：完成 `face` 安装和本机录入后，运行 `./install.sh sudo-face`。每当 sudo 需要重新认证时，控制终端会显示 `Use face authentication? [y/N]`；只有明确输入 `y` 或 `Y` 才启动 Howdy 摄像头。直接回车、其他输入、超时、没有控制终端或识别失败，都会继续现有密码认证。它只修改 `/etc/pam.d/sudo` 和 root 所有的 `/usr/local/libexec/omarchy-sudo-face-consent`；会沿用 `system-auth` 中现有的 faillock 预认证与成功记录选项，不修改 `system-auth`、`su`、桌面登录或锁屏行为。sudo PAM 文件和原有 helper 会备份。运行 `./scripts/restore.sh` 可恢复；若安装前 helper 不存在，恢复时会删除它。
 
@@ -85,7 +85,8 @@ systemctl status iptsd.service
 omarchy restart shell
 ```
 
-锁屏进入安全状态时不会自动启动相机。屏幕先显示“已锁定。点击或按键使用人脸”；之后新的按键、点击或触摸才会启动一次识别，界面/PAM 请求在 12 秒后中止。鼠标移动只唤醒显示；锁屏快捷键释放、显示器变化和预览均不会启动相机。识别失败后不会自动重试；点“重试人脸”可再试，点“使用密码”进入原密码流程。当前尚不能保证 PAM 中断时 Howdy 识别进程立即退出，因此真实摄像头停止时间仍是待解决项。请在依赖人脸识别前确认密码仍可解锁。
+手动锁屏及进入 secure 状态本身不会启动相机。屏幕已亮时，新的普通按键、点击或触摸可启动一次识别；实际熄屏唤醒或 logind 休眠恢复后，会等待 1.5 秒再自动尝试一次，无须再点按钮。锁屏快捷键的修饰键、自动重复和释放不触发识别。失败后不会定时循环扫描；点“再试一次”可重试，点“使用密码”进入原密码流程，选择密码后此轮锁屏不会自动切回人脸。当前尚不能保证 PAM 中断时 Howdy 识别进程立即退出，因此真实摄像头停止时间仍是待解决项。请先确认密码仍可解锁。
+
 
 更新已有锁屏插件时，在项目目录运行 `./scripts/install-lock-ui.sh`，然后运行 `omarchy restart shell`。安装器会先备份旧插件；`./scripts/restore.sh` 可恢复原目录，并在适用时移除新加的 `FaceAttemptPolicy.js`。这只更新用户级锁屏插件，不安装或更改系统 PAM。
 
@@ -117,3 +118,11 @@ bash tests/run.sh
 自动化测试只使用临时文件，不安装软件或改动系统配置。锁屏基础运行已由项目负责人在 Surface Laptop 5 本机确认；完整硬件验收矩阵仍需逐项记录。
 
 完整实机记录见 [docs/verified-surface-laptop-5.md](docs/verified-surface-laptop-5.md)。软件和硬件项目来源列在英文 [README](README.md#upstream-references) 中。
+
+## 中英双语插件界面（2.0 开发版）
+
+已将确认的 HTML 原型实现为原生 Qt Quick 组件。锁屏与图形管理员授权共用身份、图标、密码输入和相机引导组件，跟随 Omarchy「Setup → Language」即时切换英文和简体中文；其他语言回退到英文。减少动态效果跟随 Omarchy 设置，个人头像读取本地 `~/.face`，不存在时使用 Omarchy 默认标志。
+
+已有可用配置可先运行 `./scripts/install-plugin-ui.sh --check` 查看目标，在桌面未锁定时运行 `./install.sh plugin-ui`，再执行 `omarchy restart shell`。此步骤不修改 PAM。终端中文提示另运行 `./install.sh sudo-face` 更新。锁屏在实际熄屏唤醒或休眠恢复后延迟 1.5 秒尝试一次识别；手动锁屏本身不启动识别。
+
+详见[插件开发、安装和验收说明](docs/plugin-development.md)。需要现有系统提供 `Commons.Translations` 接口。本次开发没有替换正在运行的认证组件，尚需安装后实机验收；界面的 12 秒超时不代表已验证的相机硬件关闭时限。

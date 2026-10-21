@@ -81,7 +81,8 @@ function startSecureLock(state) {
   assert.deepEqual(suspendResult.effects, ['ABORT_FACE']);
   assert.equal(suspendResult.state.phase, 'locked_idle');
 
-  let unlocked = send(suspendResult.state, 'INTENT');
+  let resumed = send(suspendResult.state, 'RESUME');
+  let unlocked = send(resumed.state, 'FACE_SELECTED');
   const unlockResult = send(unlocked.state, 'UNLOCKED', { lockId: unlocked.state.lockId });
   assert.deepEqual(unlockResult.effects, ['ABORT_FACE']);
   assert.equal(unlockResult.state.phase, 'inactive');
@@ -115,7 +116,7 @@ function startSecureLock(state) {
   state = result.state;
   result = send(state, 'FACE_TIMEOUT', { lockId: state.lockId, attemptId: state.attemptId });
   assert.deepEqual(result.effects, ['ABORT_FACE']);
-  assert.equal(result.state.phase, 'failed');
+  assert.equal(result.state.phase, 'timed_out');
 }
 
 {
@@ -133,3 +134,42 @@ function startSecureLock(state) {
 }
 
 console.log('Lock face policy tests passed.');
+
+// An actual blank-to-wake edge gets one delayed attempt, never a periodic poll.
+{
+ let s = startSecureLock(createState());
+ let r = send(s, 'SCREEN_WOKE'); assert.deepEqual(r.effects, [], 'lit manual lock is not a wake');
+ r = send(s, 'DISPLAY_BLANKED');
+ r = send(r.state, 'SCREEN_WOKE');
+ assert.equal(r.state.phase, 'wake_delay');
+ assert.deepEqual(r.effects, ['START_WAKE_DELAY']);
+ const wake = {lockId:r.state.lockId, wakeId:r.state.wakeId};
+ r = send(r.state, 'SCREEN_WOKE'); assert.deepEqual(r.effects, [], 'wake bounce cannot rearm');
+ r = send(r.state, 'WAKE_DELAY_ELAPSED', wake); assert.deepEqual(r.effects, ['START_FACE']);
+ const attempt = {lockId:r.state.lockId, attemptId:r.state.attemptId};
+ r = send(r.state, 'FACE_RESULT', {...attempt,result:'failure'});
+ assert.deepEqual(send(r.state,'INTENT').effects, [], 'no implicit retry');
+ assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',wake).effects, [], 'expired delay cannot retry');
+}
+{
+ let r = send(startSecureLock(createState()),'DISPLAY_BLANKED');
+ r=send(r.state,'SCREEN_WOKE'); const stale={lockId:r.state.lockId,wakeId:r.state.wakeId};
+ r=send(r.state,'PASSWORD_SELECTED');
+ assert.ok(r.effects.includes('STOP_WAKE_DELAY'));
+ assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',stale).effects, []);
+ r=send(r.state,'DISPLAY_BLANKED');
+ assert.deepEqual(send(r.state,'SCREEN_WOKE').effects, [], 'password choice wins over auto wake');
+}
+{
+ let r = send(startSecureLock(createState()),'SUSPEND');
+ r=send(r.state,'RESUME'); assert.equal(r.state.phase,'wake_delay');
+ const old={lockId:r.state.lockId,wakeId:r.state.wakeId};
+ r=send(r.state,'SUSPEND');
+ assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',old).effects, []);
+ r=send(r.state,'RESUME');
+ assert.ok(r.state.wakeId > old.wakeId);
+ assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',old).effects, []);
+ r=send(r.state,'DISPLAY_BLANKED');
+ assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',{lockId:r.state.lockId,wakeId:r.state.wakeId}).effects, []);
+}
+console.log('Wake settling and cancellation tests passed.');

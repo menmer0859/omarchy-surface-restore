@@ -22,7 +22,7 @@ fi
 
 
 lock_install="$repo_root/scripts/install-lock-ui.sh"
-grep -F 'install -m 0644 "$root/assets/omarchy-lock/FaceAttemptPolicy.js" "$plugin_root/FaceAttemptPolicy.js"' "$lock_install" >/dev/null
+grep -F 'install_face_ui_resources lock "$plugin_root"' "$lock_install" >/dev/null
 grep -F 'mark_new_path "$plugin_root/FaceAttemptPolicy.js"' "$lock_install" >/dev/null
 
 # Backing up an existing plugin directory preserves its complete old contents.

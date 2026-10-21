@@ -22,13 +22,25 @@ elif ! { exec 3<>/dev/tty; } 2>/dev/null; then
   exit 1
 fi
 
-printf 'Use face authentication? [y/N] ' >&3
+# Read only a bounded display-language code from the authenticating user's
+# Omarchy preference. Python isolated mode ignores PYTHONPATH and user site code.
+locale_helper="$(dirname -- "${BASH_SOURCE[0]}")/omarchy-face-auth-locale"
+prompt='Use face authentication? [y/N] '
+if [[ -f "$locale_helper" ]]; then
+  translated=$(/usr/bin/python3 -I "$locale_helper" --user "${PAM_USER:-${SUDO_USER:-}}" 2>/dev/null) && prompt=$translated
+fi
+printf '%s' "$prompt" >&3
 answer=''
 if ! IFS= read -r -t 30 answer <&3; then
   exit 1
 fi
 
 case "$answer" in
-  y|Y) exit 0 ;;
+  y|Y)
+    if [[ -f "$locale_helper" ]]; then
+      /usr/bin/python3 -I "$locale_helper" --user "${PAM_USER:-${SUDO_USER:-}}" --key face.hint >&3 2>/dev/null
+      printf '\n' >&3
+    fi
+    exit 0 ;;
   *) exit 1 ;;
 esac

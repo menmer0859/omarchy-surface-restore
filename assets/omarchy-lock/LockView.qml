@@ -1,11 +1,11 @@
 import QtQuick
 import QtQuick.Effects
-import qs.Commons
-import qs.Ui
+import Quickshell
+import qs.Commons as Commons
+import "FaceUi" as FaceUi
 
 Item {
     id: root
-
     property string backgroundPath: ""
     property int backgroundVersion: 0
     property bool fingerprintConfigured: false
@@ -19,26 +19,14 @@ Item {
     property bool inputEnabled: true
     property bool loadBackground: true
     property string passwordText: ""
-    property bool syncingPasswordText: false
-
+    property string userName: Quickshell.env("USER") || Quickshell.env("LOGNAME")
+    property string avatarPath: Quickshell.env("HOME") + "/.face"
+    property bool externalDisplay: false
+    property bool reducedMotion: Commons.Style.reduceMotion
     readonly property bool passwordMode: !faceConfigured || facePhase === "password" || unlockMode === "password"
-    readonly property string placeholderText: "输入密码"
-    readonly property int fieldWidth: 381
-    readonly property int fieldHeight: 67
-    readonly property int outlineThickness: 3
-    readonly property int fieldFontSize: Math.round(Style.font.heading * 1.125)
-    readonly property int passwordDotFontSize: Math.round(Style.font.heading * 1.33)
-    readonly property int passwordDotLetterSpacing: Math.round(Style.font.heading * 0.19)
-    // Space to keep clear on each side of the field for the fingerprint icon
-    // (icon width plus a gap) so the centered dots never run under it.
-    readonly property real fingerprintReserve: fingerprintConfigured ? Math.round(fingerprintIcon.implicitWidth + 12) : 0
-    // Shrink the dots to fit once the password outgrows the field, so every
-    // keystroke stays visible — otherwise long passwords clip with no feedback.
-    readonly property real passwordDotScale: dotMetrics.advanceWidth > 0 ? Math.min(1, (passwordInput.width - 4) / dotMetrics.advanceWidth) : 1
-    readonly property bool showPasswordCursor: inputEnabled && passwordMode && !authenticatingPassword && failureMessage.length === 0
-    readonly property bool errorState: failureMessage.length > 0
-    readonly property var inputBorderSpec: errorState ? Border.surfaceSpec("lock", "border-error", Color.lock.borderError, root.outlineThickness, "border-alpha") : Border.surfaceSpec("lock", "border-active", Color.lock.borderActive, root.outlineThickness, "border-alpha")
-
+    readonly property string stateTitle: auth.stateTitle
+    readonly property string identityLabel: auth.identityLabel
+    readonly property bool identityVertical: auth.identityVertical
     signal submitPassword(string password)
     signal passwordTextEdited(string password)
     signal clearFailureRequested
@@ -46,48 +34,42 @@ Item {
     signal faceIntentRequested
     signal faceRetryRequested
     signal unlockModeRequested(string mode)
-
-    function requestFaceIntent() {
-        if (!inputEnabled)
-            return;
-        wakeRequested();
-        faceIntentRequested();
+    signal blankRequested
+    FaceUi.AuthStrings {
+        id: strings
     }
-
-    // Cache-busts the lock background by appending `?v=`. Adding a query
-    // string keeps Image's loader happy while forcing it to reload when the
-    // user picks a new background mid-session.
-    function fileUrl(path) {
-        if (!path)
-            return "";
-        var encoded = String(path).split("/").map(encodeURIComponent).join("/");
-        return "file://" + encoded + "?v=" + backgroundVersion;
-    }
-
     function forcePasswordFocus() {
         if (inputEnabled && passwordMode)
-            passwordInput.forceActiveFocus();
-        else if (inputEnabled)
-            forceActiveFocus();
+            auth.focusPassword();
+        else
+            root.forceActiveFocus();
     }
-
-    function clearPassword() {
-        passwordTextEdited("");
+    function requestFaceIntent() {
+        if (inputEnabled) {
+            wakeRequested();
+            faceIntentRequested();
+        }
     }
-
+    function fileUrl(path) {
+        return path ? "file://" + String(path).split("/").map(encodeURIComponent).join("/") + "?v=" + backgroundVersion : "";
+    }
     function syncPasswordText() {
-        if (passwordInput.text === passwordText)
-            return;
-        syncingPasswordText = true;
-        passwordInput.text = passwordText;
-        syncingPasswordText = false;
+        if (auth.passwordText !== passwordText)
+            auth.passwordText = passwordText;
     }
-
+    onPasswordTextChanged: syncPasswordText()
+    onPasswordModeChanged: Qt.callLater(forcePasswordFocus)
+    onInputEnabledChanged: if (inputEnabled)
+        Qt.callLater(forcePasswordFocus)
+    Component.onCompleted: {
+        syncPasswordText();
+        Qt.callLater(forcePasswordFocus);
+    }
     focus: inputEnabled && !passwordMode
+    LayoutMirroring.enabled: Commons.I18n.rightToLeft
+    LayoutMirroring.childrenInherit: true
     Keys.onPressed: function (event) {
-        if (!inputEnabled)
-            return;
-        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+        if (!inputEnabled || event.isAutoRepeat || event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)))
             return;
         if (!passwordMode)
             root.requestFaceIntent();
@@ -95,247 +77,176 @@ Item {
             root.wakeRequested();
         event.accepted = true;
     }
-
-    onPasswordTextChanged: syncPasswordText()
-    onInputEnabledChanged: {
-        if (inputEnabled)
-            Qt.callLater(forcePasswordFocus);
+    SystemClock {
+        id: clock
+        precision: SystemClock.Minutes
     }
-    onPasswordModeChanged: {
-        if (passwordMode && inputEnabled)
-            Qt.callLater(forcePasswordFocus);
+    Column {
+        id: clockGroup
+        visible: root.height >= 650
+        anchors.top: parent.top
+        anchors.topMargin: 55
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 3
+        FaceUi.Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: clock.date.toLocaleTimeString(Qt.locale(Commons.I18n.formatLocale), "HH:mm")
+            font.pixelSize: 62
+            font.weight: Font.Light
+        }
+        FaceUi.Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: clock.date.toLocaleDateString(Qt.locale(Commons.I18n.formatLocale), Locale.LongFormat)
+            font.pixelSize: 15
+            opacity: 0.75
+        }
     }
-    Component.onCompleted: {
-        syncPasswordText();
-        if (inputEnabled)
-            Qt.callLater(forcePasswordFocus);
-    }
-
-    // Measures the masked password at full size; passwordDotScale compares this
-    // against the field width to decide how far the dots must shrink to fit.
-    TextMetrics {
-        id: dotMetrics
-        font.family: Style.font.family
-        font.pixelSize: root.passwordDotFontSize
-        font.letterSpacing: root.passwordDotLetterSpacing
-        text: "●".repeat(passwordInput.text.length)
-    }
-
     Rectangle {
         anchors.fill: parent
-        color: Color.background
-
-        Image {
-            id: wallpaper
-            anchors.fill: parent
-            source: root.loadBackground ? root.fileUrl(root.backgroundPath) : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            cache: false
-            sourceSize.width: width
-            sourceSize.height: height
+        color: Commons.Color.background
+        z: -3
+    }
+    Image {
+        id: wallpaper
+        z: -2
+        anchors.fill: parent
+        source: root.loadBackground ? root.fileUrl(root.backgroundPath) : ""
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        visible: false
+        cache: false
+        sourceSize.width: width
+        sourceSize.height: height
+    }
+    MultiEffect {
+        z: -2
+        anchors.fill: parent
+        source: wallpaper
+        blurEnabled: wallpaper.status === Image.Ready
+        blur: 1
+        blurMax: 48
+        autoPaddingEnabled: false
+    }
+    Rectangle {
+        z: -1
+        anchors.fill: parent
+        color: Qt.alpha(Commons.Color.background, 0.72)
+    }
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        onPressed: root.requestFaceIntent()
+        onPositionChanged: root.wakeRequested()
+    }
+    Row {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 28
+        spacing: 10
+        FaceUi.Icon {
+            name: "lock"
+            ink: Commons.Color.foreground
+            width: 16
+            height: 16
         }
-
-        MultiEffect {
-            anchors.fill: wallpaper
-            source: wallpaper
-            autoPaddingEnabled: false
-            blurEnabled: root.loadBackground && wallpaper.status === Image.Ready
-            blur: 1.0
-            blurMax: 128
-            blurMultiplier: 1.25
-            contrast: -0.08
+        FaceUi.Label {
+            text: strings.t("status.locked")
+            font.pixelSize: 12
+            opacity: 0.7
         }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onPressed: root.requestFaceIntent()
-            onClicked: {
-                root.wakeRequested();
-                root.forcePasswordFocus();
-            }
-            onPositionChanged: root.wakeRequested()
+        FaceUi.Label {
+            text: strings.t(root.faceAuthenticating ? "status.scanning" : "status.noScan")
+            font.pixelSize: 12
+            opacity: 0.7
         }
-
-        BorderSurface {
-            id: inputField
-            width: root.fieldWidth
-            height: root.fieldHeight
-            anchors.centerIn: parent
-            color: Color.lock.background
-            borderSpec: root.inputBorderSpec
-            radius: Style.cornerRadius
-            clip: true
-
-            TextInput {
-                id: passwordInput
-                anchors.fill: parent
-                anchors.topMargin: inputField.borderTop
-                // Reserve the fingerprint icon's width on both sides so the centered
-                // dots stay symmetric and never slide under the icon as they grow.
-                anchors.rightMargin: inputField.borderRight + 18 + root.fingerprintReserve
-                anchors.bottomMargin: inputField.borderBottom
-                anchors.leftMargin: inputField.borderLeft + 18 + root.fingerprintReserve
-                verticalAlignment: TextInput.AlignVCenter
-                horizontalAlignment: TextInput.AlignHCenter
-                activeFocusOnPress: true
-                clip: true
-                enabled: root.inputEnabled && root.passwordMode && !root.authenticatingPassword
-                visible: root.passwordMode
-                readOnly: root.authenticatingPassword
-                echoMode: TextInput.Password
-                passwordCharacter: "\u25CF"
-                passwordMaskDelay: 0
-                color: Color.lock.text
-                selectionColor: Color.lock.selection
-                selectedTextColor: Color.lock.text
-                font.family: Style.font.family
-                font.pixelSize: text.length > 0 ? Math.max(1, Math.floor(root.passwordDotFontSize * root.passwordDotScale)) : root.fieldFontSize
-                font.letterSpacing: text.length > 0 ? root.passwordDotLetterSpacing * root.passwordDotScale : 0
-                cursorVisible: activeFocus && root.showPasswordCursor && text.length > 0
-                cursorDelegate: Rectangle {
-                    width: 2
-                    color: Color.lock.text
-                    visible: passwordInput.cursorVisible
-                }
-
-                onTextChanged: {
-                    if (!root.syncingPasswordText)
-                        root.passwordTextEdited(text);
-                    if (text.length > 0) {
-                        root.wakeRequested();
-                    }
-                    if (text.length > 0 && root.failureMessage.length > 0)
-                        root.clearFailureRequested();
-                }
-
-                onAccepted: {
-                    var submitted = root.passwordText;
-                    root.passwordTextEdited("");
-                    if (submitted.length > 0)
-                        root.submitPassword(submitted);
-                }
-
-                Keys.onPressed: function (event) {
-                    root.wakeRequested();
-                    if (event.key === Qt.Key_Escape || (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_U)) {
-                        root.passwordTextEdited("");
-                        event.accepted = true;
-                    }
-                }
-            }
-
-            Text {
-                textFormat: Text.PlainText
-                anchors.fill: passwordInput
-                text: root.authenticatingPassword ? "Checking…" : (root.failureMessage.length > 0 ? root.failureMessage : root.placeholderText)
-                visible: root.passwordMode && passwordInput.text.length === 0
-                color: root.authenticatingPassword ? Color.lock.text : (root.failureMessage.length > 0 ? Color.lock.textError : Color.lock.placeholder)
-                font.family: Style.font.family
-                font.pixelSize: root.fieldFontSize
-                font.italic: !root.authenticatingPassword && root.failureMessage.length > 0
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-            }
-
-            Text {
-                anchors.fill: parent
-                visible: !root.passwordMode
-                text: root.facePhase === "scanning" ? "正在识别人脸…" : (root.facePhase === "failed" ? "未识别。重试人脸或使用密码" : "已锁定。点击或按键使用人脸")
-                color: Color.lock.text
-                font.family: Style.font.family
-                font.pixelSize: root.fieldFontSize
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            // Fingerprint hint pinned inside the field's right edge when a sensor is
-            // enrolled, so the user knows they can touch to unlock instead of typing.
-            // Matches hyprlock, which draws its fingerprint icon in the same spot.
-            Text {
-                id: fingerprintIcon
-                objectName: "fingerprintIndicator"
-                anchors.right: parent.right
-                anchors.rightMargin: inputField.borderRight + 18
-                anchors.verticalCenter: parent.verticalCenter
-                visible: root.fingerprintConfigured && root.passwordMode
-                text: "󰈷"
-                color: Color.lock.placeholder
-                font.family: Style.font.family
-                font.pixelSize: Math.round(root.fieldFontSize * 1.1)
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
+    }
+    Flickable {
+        anchors {
+            fill: parent
+            topMargin: clockGroup.visible ? 180 : 74
+            bottomMargin: 86
         }
-
-        Rectangle {
-            id: switchModeButton
-            visible: root.faceConfigured
+        contentWidth: width
+        contentHeight: Math.max(height, auth.implicitHeight + 40)
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        FaceUi.AuthCard {
+            id: auth
+            transform: Translate {
+                x: root.shake
+            }
+            objectName: "authenticationCard"
+            width: Math.min(410, parent.width - 48)
+            x: (parent.width - width) / 2
+            y: Math.max(20, (parent.height - implicitHeight) / 2)
+            height: implicitHeight
             enabled: root.inputEnabled
-            width: Math.max(190, switchModeLabel.implicitWidth + 36)
-            height: 44
-            anchors.top: inputField.bottom
-            anchors.topMargin: 18
-            anchors.horizontalCenter: root.facePhase === "failed" ? undefined : inputField.horizontalCenter
-            anchors.right: root.facePhase === "failed" ? parent.horizontalCenter : undefined
-            anchors.rightMargin: root.facePhase === "failed" ? 8 : 0
-            radius: Style.cornerRadius
-            color: Color.lock.background
-            activeFocusOnTab: root.inputEnabled && root.faceConfigured
-            focus: root.inputEnabled && !root.passwordMode
-
-            Text {
-                id: switchModeLabel
-                anchors.centerIn: parent
-                text: root.passwordMode ? "使用人脸" : "使用密码"
-                color: Color.lock.text
-                font.family: Style.font.family
-                font.pixelSize: Math.round(Style.font.heading)
+            userName: root.userName
+            avatarPath: root.avatarPath
+            phase: root.facePhase
+            faceAvailable: root.faceConfigured
+            passwordMode: root.passwordMode
+            passwordBusy: root.authenticatingPassword
+            passwordError: root.failureMessage !== ""
+            externalDisplay: root.externalDisplay
+            reducedMotion: root.reducedMotion
+            onFaceRequested: root.unlockModeRequested("face")
+            onPasswordRequested: root.unlockModeRequested("password")
+            onSubmitted: function (value) {
+                root.submitPassword(value);
+                root.passwordTextEdited("");
             }
-
-            MouseArea {
-                anchors.fill: parent
-                enabled: root.inputEnabled
-                onClicked: {
-                    if (root.facePhase === "failed" && !root.passwordMode)
-                        root.unlockModeRequested("password");
-                    else
-                        root.unlockModeRequested(root.passwordMode ? "face" : "password");
-                }
+            onPasswordTextChanged: if (passwordText !== root.passwordText)
+                root.passwordTextEdited(passwordText)
+            onEditing: {
+                root.wakeRequested();
+                root.clearFailureRequested();
             }
-            Keys.onReturnPressed: root.unlockModeRequested(root.passwordMode ? "face" : "password")
-            Keys.onSpacePressed: root.unlockModeRequested(root.passwordMode ? "face" : "password")
         }
-
-        Rectangle {
-            id: faceRetryButton
-            visible: root.inputEnabled && root.faceConfigured && root.facePhase === "failed"
-            width: 180
-            height: 44
-            anchors.top: inputField.bottom
-            anchors.topMargin: 18
-            anchors.left: parent.horizontalCenter
-            anchors.leftMargin: 8
-            radius: Style.cornerRadius
-            color: Color.lock.background
-            activeFocusOnTab: visible
-
-            Text {
-                anchors.centerIn: parent
-                text: "重试人脸"
-                color: Color.lock.text
-                font.family: Style.font.family
-                font.pixelSize: Math.round(Style.font.heading)
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root.faceRetryRequested()
-            }
-            Keys.onReturnPressed: root.faceRetryRequested()
-            Keys.onSpacePressed: root.faceRetryRequested()
+    }
+    FaceUi.Action {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 28
+        label: strings.t("action.screenOff")
+        iconName: "screen"
+        enabled: root.inputEnabled
+        onClicked: root.blankRequested()
+    }
+    property real shake: 0
+    Connections {
+        target: root
+        function onFailedAttemptsChanged() {
+            if (root.failedAttempts > 0 && !root.reducedMotion)
+                shakeAnimation.restart();
         }
+    }
+    SequentialAnimation {
+        id: shakeAnimation
+        NumberAnimation {
+            target: root
+            property: "shake"
+            to: -7
+            duration: 50
+        }
+        NumberAnimation {
+            target: root
+            property: "shake"
+            to: 6
+            duration: 70
+        }
+        NumberAnimation {
+            target: root
+            property: "shake"
+            to: -3
+            duration: 80
+        }
+        NumberAnimation {
+            target: root
+            property: "shake"
+            to: 0
+            duration: 140
+        }
+        // Translate only the card; the secure session surface never moves.
     }
 }

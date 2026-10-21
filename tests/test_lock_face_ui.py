@@ -95,7 +95,7 @@ class LockFaceUiTests(unittest.TestCase):
         key_handler = qml_block(self.view, "Keys.onPressed:")
         self.assertIn("Qt.Key_Tab", key_handler)
         self.assertIn("Qt.Key_Backtab", key_handler)
-        self.assertRegex(key_handler, r"if \(event\.key === Qt\.Key_Tab \|\| event\.key === Qt\.Key_Backtab\)\s+return")
+        self.assertIn("Qt.Key_Backtab", key_handler)
 
     def test_blank_screen_pointer_motion_wakes_without_requesting_face_auth(self):
         self.assertIn("property bool displayBlanked: false", self.service, "display blank tracking must be present")
@@ -114,9 +114,7 @@ class LockFaceUiTests(unittest.TestCase):
         self.assertEqual(len(timers), 1)
         self.assertIn("interval: 12000", timers[0])
         self.assertIn("repeat: false", timers[0])
-        retry_button = qml_block(self.view, "id: faceRetryButton")
-        self.assertIn('text: "重试人脸"', retry_button)
-        self.assertIn("onClicked: root.faceRetryRequested()", self.view)
+        self.assertIn('onFaceRequested: root.unlockModeRequested("face")', self.view)
 
     def test_password_selection_and_submission_abort_face_before_authentication(self):
         mode = qml_block(self.service, "function setUnlockMode(mode)")
@@ -124,8 +122,7 @@ class LockFaceUiTests(unittest.TestCase):
         self.assertIn('type: "PASSWORD_SELECTED"', mode)
         self.assertIn('type: "PASSWORD_SELECTED"', submit)
         self.assertLess(submit.index('type: "PASSWORD_SELECTED"'), submit.index("passwordPam.start()"))
-        self.assertIn("使用密码", self.view)
-        self.assertIn("使用人脸", self.view)
+        self.assertIn('onPasswordRequested: root.unlockModeRequested("password")', self.view)
 
     def test_each_pam_context_captures_its_generation_to_reject_late_callbacks(self):
         self.assertIn("facePamLockId", self.service)

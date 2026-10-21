@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
 import Quickshell.Wayland
+import "FaceUi" as FaceUi
 import qs.Commons
 
 Item {
@@ -36,7 +37,9 @@ Item {
     property bool previewVisible: false
     property string enteredPassword: ""
     property string pendingPassword: ""
-    property string failureMessage: ""
+    property bool passwordFailed: false
+    FaceUi.AuthStrings { id: strings }
+    readonly property string failureMessage: passwordFailed ? strings.t("password.failed") : ""
     property int failedAttempts: 0
     property string backgroundPath: ""
     property int backgroundVersion: 0
@@ -168,6 +171,13 @@ Item {
                 startFaceAttempt();
             else if (result.effects[i] === "ABORT_FACE")
                 abortFaceAttempt();
+            else if (result.effects[i] === "START_WAKE_DELAY") {
+                wakeSettleTimer.lockId = facePolicyState.lockId;
+                wakeSettleTimer.wakeId = facePolicyState.wakeId;
+                wakeSettleTimer.restart();
+                runWake();
+            } else if (result.effects[i] === "STOP_WAKE_DELAY")
+                wakeSettleTimer.stop();
             else if (result.effects[i] === "UNLOCK")
                 finishUnlock();
         }
@@ -176,11 +186,12 @@ Item {
     function resetAuthenticationState() {
         enteredPassword = "";
         pendingPassword = "";
-        failureMessage = "";
+        passwordFailed = false;
         failedAttempts = 0;
         authenticatingPassword = false;
         fingerprintAuthenticating = false;
         fingerprintRetryTimer.stop();
+        wakeSettleTimer.stop();
         abortFaceAttempt();
         if (passwordPam.active)
             passwordPam.abort();
@@ -195,7 +206,7 @@ Item {
             return;
         unlockMode = mode;
         enteredPassword = "";
-        failureMessage = "";
+        passwordFailed = false;
         if (mode === "password") {
             applyFaceEvent({ type: "PASSWORD_SELECTED" });
         } else {
@@ -258,11 +269,14 @@ Item {
     function handleWakeRequested() {
         if (!lockRequested)
             return;
+        var wasBlank = displayBlanked;
         runWake();
+        if (wasBlank) applyFaceEvent({ type: "SCREEN_WOKE" });
     }
 
     function runBlank() {
         if (!blankProcess.running) {
+            applyFaceEvent({ type: "DISPLAY_BLANKED" });
             displayBlanked = true;
             blankProcess.running = true;
         }
@@ -275,7 +289,7 @@ Item {
         applyFaceEvent({ type: "PASSWORD_SELECTED" });
         runWake();
         pendingPassword = password;
-        failureMessage = "";
+        passwordFailed = false;
         authenticatingPassword = true;
 
         if (!passwordPam.start()) {
@@ -299,7 +313,7 @@ Item {
         enteredPassword = "";
         pendingPassword = "";
         failedAttempts += 1;
-        failureMessage = "Authentication failed (" + failedAttempts + ")";
+        passwordFailed = true;
         runWake();
     }
 
@@ -348,8 +362,12 @@ Item {
         context.completed.connect(function (result) {
             root.handleFaceFinished(result, lockId, attemptId, context);
         });
-        if (!context.start())
+        // Check lid before starting a camera, including explicit attempts.
+        faceLidGate.lockId = lockId;
+        faceLidGate.attemptId = attemptId;
+        if (faceLidGate.running) {
             handleFaceFinished(PamResult.Error, lockId, attemptId, context);
+        } else faceLidGate.running = true;
     }
 
     function handleFaceFinished(result, lockId, attemptId, context) {
@@ -371,6 +389,17 @@ Item {
             attemptId: attemptId,
             result: result === PamResult.Success && elapsed < faceAttemptTimer.interval ? "success" : "failure"
         });
+    }
+
+    Process {
+        id: faceLidGate
+        property int lockId: 0
+        property int attemptId: 0
+        command: ["bash", "-c", "omarchy-hw-laptop-closed; code=$?; test $code -eq 1"]
+        onExited: function(code) {
+            if (!root.activeFacePam || lockId !== root.facePamLockId || attemptId !== root.facePamAttemptId || root.facePhase !== "scanning") return;
+            if (code !== 0 || !root.activeFacePam.start()) root.handleFaceFinished(PamResult.Error, lockId, attemptId, root.activeFacePam);
+        }
     }
 
     WlSessionLock {
@@ -426,6 +455,7 @@ Item {
                 authenticatingPassword: root.authenticatingPassword
                 failureMessage: root.failureMessage
                 failedAttempts: root.failedAttempts
+                externalDisplay: lockSurface.screen && !/^(eDP|LVDS|DSI)/i.test(lockSurface.screen.name)
                 inputEnabled: root.lockRequested
                 loadBackground: root.locked
                 passwordText: root.enteredPassword
@@ -435,9 +465,10 @@ Item {
                 onSubmitPassword: function (password) {
                     root.submitPassword(password);
                 }
-                onClearFailureRequested: root.failureMessage = ""
+                onClearFailureRequested: root.passwordFailed = false
                 onWakeRequested: root.handleWakeRequested()
                 onFaceIntentRequested: root.applyFaceEvent({ type: "INTENT" })
+                onBlankRequested: root.runBlank()
                 onFaceRetryRequested: function () {
                     root.unlockMode = "face";
                     root.applyFaceEvent({ type: "FACE_SELECTED" });
@@ -556,6 +587,15 @@ Item {
         });
     }
 
+    Timer {
+        id: wakeSettleTimer
+        interval: 1500
+        repeat: false
+        property int lockId: 0
+        property int wakeId: 0
+        onTriggered: root.applyFaceEvent({ type: "WAKE_DELAY_ELAPSED", lockId: lockId, wakeId: wakeId })
+    }
+
     Process {
         id: suspendEventProc
         command: ["dbus-monitor", "--system", "type='signal',sender='org.freedesktop.login1',path='/org/freedesktop/login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'"]
@@ -568,7 +608,11 @@ Item {
                     root.suspendSignalPending = true;
                 } else if (root.suspendSignalPending && line.indexOf("boolean true") >= 0) {
                     root.suspendSignalPending = false;
+                    root.displayBlanked = true;
                     root.applyFaceEvent({ type: "SUSPEND" });
+                } else if (root.suspendSignalPending && line.indexOf("boolean false") >= 0) {
+                    root.suspendSignalPending = false;
+                    root.applyFaceEvent({ type: "RESUME" });
                 }
             }
         }
@@ -657,6 +701,33 @@ Item {
         command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
     }
 
+    function applyMonitorState(raw) {
+        var monitors;
+        try { monitors = JSON.parse(raw); } catch (error) { return; }
+        if (!Array.isArray(monitors) || !monitors.length) return;
+        var active = monitors.some(function(m) { return !m.disabled && m.dpmsStatus === true; });
+        var known = monitors.some(function(m) { return typeof m.dpmsStatus === "boolean"; });
+        if (!known || !lockRequested) return;
+        if (!active && !displayBlanked) { displayBlanked = true; applyFaceEvent({type: "DISPLAY_BLANKED"}); }
+        else if (active && displayBlanked && !blankProcess.running) handleWakeRequested();
+    }
+
+    Process {
+        id: monitorState
+        command: ["hyprctl", "monitors", "-j"]
+        stdout: StdioCollector { onStreamFinished: root.applyMonitorState(text) }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.lockRequested
+        onTriggered: if (!monitorState.running) monitorState.running = true
+    }
+    onFacePhaseChanged: {
+        if (facePhase === "scanning" || facePhase === "wake_delay") idleBlankTimer.stop();
+        else if (lockRequested && !displayBlanked) armBlankTimer();
+    }
+
     Timer {
         id: idleBlankTimer
         interval: 5000
@@ -673,7 +744,7 @@ Item {
             // Only a password check in flight should hold the display up. The
             // fingerprint PAM stays armed for the whole lock, so gating on
             // `authenticating` here would keep the panel lit until unlock.
-            if (root.lockRequested && !root.authenticatingPassword)
+            if (root.lockRequested && !root.authenticatingPassword && !root.faceAuthenticating && root.facePhase !== "wake_delay")
                 root.runBlank();
         }
     }

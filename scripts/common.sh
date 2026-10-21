@@ -87,3 +87,19 @@ backup_and_report() {
     info "Backed up $item to $backup"
   done
 }
+
+# Required by the bilingual plugin; stop before mutation on older shells.
+require_face_ui_api() {
+  [[ -r /usr/share/omarchy/shell/Commons/Translations.qml ]] || die 'This plugin UI requires Omarchy Commons.Translations. Update Omarchy before installing the UI.'
+}
+
+# Back up the old plugin directory, then record every newly introduced path so
+# restore removes new catalogs/components before restoring the earlier version.
+install_face_ui_resources() {
+  local kind=$1 target=$2 relative
+  python3 "$root/scripts/deploy-face-ui.py" "$kind" "$target" --check
+  while IFS= read -r relative; do
+    [[ -e "$target/$relative" ]] || mark_new_path "$target/$relative"
+  done < <(python3 "$root/scripts/deploy-face-ui.py" "$kind" "$target" --list)
+  python3 "$root/scripts/deploy-face-ui.py" "$kind" "$target"
+}

@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/common.sh"
 require_omarchy
+require_face_ui_api
 require_surface_hint
 require_commands pacman sudo python3 find sort id
 

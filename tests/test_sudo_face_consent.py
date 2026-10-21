@@ -5,20 +5,22 @@ import select
 import subprocess
 import time
 import unittest
+import tempfile
+import shutil
 from pathlib import Path
 
 
 HELPER = Path(__file__).resolve().parents[1] / "scripts" / "sudo-face-consent"
 
 
-def run_with_controlling_tty(answer: bytes | None) -> tuple[int, bytes]:
+def run_with_controlling_tty(answer: bytes | None, helper=HELPER, prompt=b"Use face authentication? [y/N]") -> tuple[int, bytes]:
     child, terminal = pty.fork()
     if child == 0:
-        os.execv(HELPER, [str(HELPER)])
+        os.environ["PAM_USER"] = "surface-face-test-nonexistent-account"
+        os.execv(helper, [str(helper)])
 
     output = bytearray()
     try:
-        prompt = b"Use face authentication? [y/N]"
         while prompt not in output:
             try:
                 chunk = os.read(terminal, 1024)
@@ -52,6 +54,7 @@ def run_with_pam_tty_without_controlling_tty(answer: bytes) -> tuple[int, bytes]
     child, terminal = pty.fork()
     if child == 0:
         env = os.environ.copy()
+        env["PAM_USER"] = "surface-face-test-nonexistent-account"
         env["PAM_TTY"] = os.ttyname(0).removeprefix("/dev/")
         process = subprocess.Popen(
             [str(HELPER)],
@@ -91,6 +94,24 @@ def run_with_pam_tty_without_controlling_tty(answer: bytes) -> tuple[int, bytes]
 
 
 class SudoFaceConsentTests(unittest.TestCase):
+    def test_chinese_prompt_and_guidance_on_a_real_terminal(self):
+        # Substitute only the locale provider so this test never edits the host's
+        # language preference. Its real parser/catalog behavior has separate tests.
+        with tempfile.TemporaryDirectory() as directory:
+            helper = Path(directory) / "sudo-face-consent"
+            shutil.copy2(HELPER, helper)
+            provider = Path(directory) / "omarchy-face-auth-locale"
+            catalogs = HELPER.parent.parent / "assets/face-ui/i18n/zh-CN.json"
+            provider.write_text("import json,sys\nfrom pathlib import Path\n"
+                + "data=json.loads(Path(" + repr(str(catalogs)) + ").read_text())\n"
+                + "print(data['face.hint' if '--key' in sys.argv else 'terminal.prompt'],end='')\n")
+            code, output = run_with_controlling_tty(b"y\n", helper, "使用人脸识别？[y/N]".encode())
+            self.assertEqual(code, 0)
+            self.assertIn("笔记本".encode(), output)
+            code, output = run_with_controlling_tty(b"n\n", helper, "使用人脸识别？[y/N]".encode())
+            self.assertNotEqual(code, 0)
+            self.assertNotIn("笔记本".encode(), output)
+
     def test_only_explicit_y_or_uppercase_y_accepts(self):
         for answer in (b"y\n", b"Y\n"):
             with self.subTest(answer=answer):

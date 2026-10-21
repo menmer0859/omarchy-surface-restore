@@ -8,6 +8,8 @@ require_commands sudo python3 install grep stat
 sudo_pam=/etc/pam.d/sudo
 system_auth=/etc/pam.d/system-auth
 helper=/usr/local/libexec/omarchy-sudo-face-consent
+locale_helper=/usr/local/libexec/omarchy-face-auth-locale
+locale_data=/usr/local/libexec/surface-face-i18n
 model="/etc/howdy/models/${USER:?USER must name the enrolling account}.dat"
 
 command -v howdy >/dev/null 2>&1 || die 'Howdy is not installed. Run ./install.sh face and enroll a model first.'
@@ -16,6 +18,7 @@ command -v howdy >/dev/null 2>&1 || die 'Howdy is not installed. Run ./install.s
 [[ -r /usr/lib/security/pam_exec.so ]] || die 'The pam_exec.so module is missing at /usr/lib/security/pam_exec.so.'
 [[ -r /usr/lib/security/pam_faillock.so ]] || die 'The pam_faillock.so module is missing at /usr/lib/security/pam_faillock.so.'
 [[ -r "$sudo_pam" && -r "$system_auth" ]] || die 'Expected readable /etc/pam.d/sudo and /etc/pam.d/system-auth files.'
+[[ ! -L "$locale_helper" && ! -L "$locale_data" ]] || die "Refusing a symlink locale helper or catalog directory"
 [[ ! -L "$helper" ]] || die "Refusing to replace symlink helper path: $helper"
 
 # Validate the existing stack before asking for changes or creating a backup.
@@ -23,7 +26,7 @@ sudo python3 "$root/scripts/configure-sudo-pam.py" "$sudo_pam" "$system_auth" --
 
 printf 'This optional setup will ask for [y/N] before each sudo face attempt.\n'
 printf 'Declining, timing out, or failed recognition continues to password authentication.\n'
-printf 'Only %s and %s will be changed.\n\n' "$sudo_pam" "$helper"
+printf 'Changes: %s, %s, %s and bilingual display catalogs.\n\n' "$sudo_pam" "$helper" "$locale_helper"
 ask_yes_no 'Enable consent-gated face authentication for sudo?' || die 'Stopped before making changes.'
 
 sudo -v
@@ -34,6 +37,14 @@ else
   mark_new_path "$helper"
 fi
 
+for path in "$locale_helper" "$locale_data"; do
+  if [[ -e "$path" ]]; then backup_and_report "$path"; else mark_new_path "$path"; fi
+done
+for language in en zh-CN; do
+  [[ -e "$locale_data/$language.json" ]] || mark_new_path "$locale_data/$language.json"
+  sudo install -D -o root -g root -m 0644 "$root/assets/face-ui/i18n/$language.json" "$locale_data/$language.json"
+done
+sudo install -D -o root -g root -m 0755 "$root/scripts/omarchy-face-auth-locale" "$locale_helper"
 sudo install -D -o root -g root -m 0755 "$root/scripts/sudo-face-consent" "$helper"
 sudo python3 "$root/scripts/configure-sudo-pam.py" "$sudo_pam" "$system_auth"
 

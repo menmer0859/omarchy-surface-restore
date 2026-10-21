@@ -1,0 +1,61 @@
+#!/usr/bin/python3
+"""Local display-language lookup only; never makes an authentication decision."""
+import argparse
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import stat
+
+
+def language_for_home(home: Path, process_locale: str) -> str:
+    path = home / '.config/omarchy/language'
+    raw = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if stat.S_ISREG(info.st_mode) and info.st_size <= 64:
+                raw = stream.read(65).decode('ascii').strip()
+    except (OSError, UnicodeError):
+        pass
+    if raw is not None:
+        return 'zh-CN' if raw == 'zh-CN' else 'en'
+    return 'zh-CN' if re.fullmatch(r'zh[_-]CN(?:\.[A-Za-z0-9-]+)?', process_locale or '') else 'en'
+
+
+def translate(language: str, key: str) -> str:
+    # The directory is deployed beside this root-owned helper. Language and keys
+    # are allow-listed; no user-provided path or catalog is loaded by PAM.
+    if language not in ('en', 'zh-CN'):
+        language = 'en'
+    if key not in ('terminal.prompt', 'face.hint'):
+        raise ValueError('unsupported display key')
+    directory = Path(__file__).absolute().parent / 'surface-face-i18n'
+    try:
+        data = json.loads((directory / (language + '.json')).read_text(encoding='utf-8'))
+        text = data.get(key)
+        if isinstance(text, str) and 0 < len(text) < 512:
+            return text
+    except (OSError, ValueError):
+        pass
+    return 'Use face authentication? [y/N] ' if key == 'terminal.prompt' else 'Look toward the camera above your laptop screen.'
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--user', default='')
+    parser.add_argument('--key', choices=('terminal.prompt', 'face.hint'), default='terminal.prompt')
+    args = parser.parse_args()
+    try:
+        account = pwd.getpwnam(args.user) if args.user else pwd.getpwuid(os.getuid())
+        locale = os.environ.get('LC_ALL') or os.environ.get('LC_MESSAGES') or os.environ.get('LANG', '')
+        language = language_for_home(Path(account.pw_dir), locale)
+    except KeyError:
+        language = 'en'
+    print(translate(language, args.key), end='')
+
+
+if __name__ == '__main__':
+    main()

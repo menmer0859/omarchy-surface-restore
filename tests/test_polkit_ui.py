@@ -40,10 +40,8 @@ class PolkitUiTests(unittest.TestCase):
     def test_plugin_maps_explicit_choices_to_the_pam_conversation(self):
         source = (ASSET / "PolkitAgent.qml").read_text(encoding="utf-8")
         self.assertIn("PolkitModel.isFaceConsentPrompt(currentPrompt)", source)
-        self.assertIn('text: "Use face"', source)
-        self.assertIn('text: "Use password"', source)
         self.assertIn('flow.submit(useFace ? "y" : "n")', source)
-        self.assertIn("Looking for your face…", source)
+        self.assertIn("scanning: root.faceCheckPending", source)
 
     def test_prompt_classifier_matches_only_our_consent_message(self):
         result = subprocess.run(
@@ -78,8 +76,8 @@ class PolkitUiTests(unittest.TestCase):
         self.assertIn("faceFallbackActive = faceFallbackActive || faceCheckPending", feedback)
         self.assertIn("faceCheckPending = false", feedback)
         self.assertIn("!faceFallbackActive", source)
-        self.assertIn('"Face recognition failed. Enter password."', source)
-        self.assertIn("readOnly: root.submitted || root.errorFlash", source)
+        self.assertIn("faceFailed: root.faceFallbackActive", source)
+        self.assertIn("busy: root.submitted", source)
         self.assertIn("onTriggered: root.errorFlash = false", source)
 
     def test_face_failure_keeps_the_current_polkit_identity(self):

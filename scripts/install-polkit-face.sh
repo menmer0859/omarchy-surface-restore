@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/common.sh"
 require_omarchy
+require_face_ui_api
 require_commands sudo python3 install cc pkg-config omarchy jq readlink systemctl
 
 service=/etc/pam.d/polkit-1
@@ -144,8 +145,7 @@ cc -shared -fPIC -Wall -Wextra -Werror "${pam_flags[@]}" \
   -o "$module_tmp" "$root/scripts/pam_surface_face_consent.c"
 sudo install -D -o root -g root -m 0644 "$module_tmp" "$module"
 sudo install -D -o root -g root -m 0755 "$root/scripts/omarchy-polkit-howdy.py" "$howdy_helper"
-install -m 0644 "$root/assets/omarchy-polkit/PolkitAgent.qml" "$plugin_qml"
-install -m 0644 "$root/assets/omarchy-polkit/PolkitModel.js" "$plugin_model"
+install_face_ui_resources polkit "$plugin_root"
 python3 - "$plugin_manifest" <<'PY'
 import json
 import sys
@@ -157,7 +157,7 @@ omarchy = data.setdefault("omarchy", {})
 if omarchy.get("clonedFrom") != "omarchy.polkit":
     raise SystemExit("refusing to label a plugin that is not cloned from omarchy.polkit")
 omarchy["surfaceFaceAuth"] = True
-data["version"] = "1.1.0"
+data["version"] = "2.0.0"
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 omarchy-shell shell rescanPlugins >/dev/null

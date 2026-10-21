@@ -6,13 +6,14 @@ source "$root/scripts/common.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [touch|face|sudo-face|polkit-face|all|check]
+Usage: ./install.sh [touch|face|sudo-face|polkit-face|all|check|plugin-ui]
 
 With no argument, an interactive menu is shown.
   touch  Install linux-surface kernel support and iptsd
   face   Configure Howdy and Omarchy lock-screen face/password switching
   sudo-face  Optionally enable explicit-consent Howdy for terminal sudo
   polkit-face  Optionally enable explicit-consent Howdy for graphical admin prompts
+  plugin-ui  Upgrade installed face plugin UI (no PAM changes)
   all    Run both setup paths
   check  Read-only system compatibility summary
 
@@ -74,6 +75,7 @@ case "$action" in
   touch) exec "$root/scripts/install-touch.sh" ;;
   face) exec "$root/scripts/install-face.sh" ;;
   sudo-face) exec "$root/scripts/install-sudo-face.sh" ;;
+  plugin-ui) exec "$root/scripts/install-plugin-ui.sh" ;;
   polkit-face) exec "$root/scripts/install-polkit-face.sh" ;;
   all)
     "$root/scripts/install-touch.sh"

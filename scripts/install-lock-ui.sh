@@ -4,6 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$root/scripts/common.sh"
 require_omarchy
+require_face_ui_api
 require_commands install python3
 
 pam_file=/etc/pam.d/omarchy-lock-face
@@ -29,9 +30,7 @@ fi
 
 install -d -m 0755 "$plugin_root"
 install -m 0644 "$root/assets/omarchy-lock/manifest.json" "$plugin_root/manifest.json"
-install -m 0644 "$root/assets/omarchy-lock/Service.qml" "$plugin_root/Service.qml"
-install -m 0644 "$root/assets/omarchy-lock/LockView.qml" "$plugin_root/LockView.qml"
-install -m 0644 "$root/assets/omarchy-lock/FaceAttemptPolicy.js" "$plugin_root/FaceAttemptPolicy.js"
+install_face_ui_resources lock "$plugin_root"
 
-info "Installed the one-shot face lock plugin at $plugin_root"
+info "Installed the bilingual face lock plugin at $plugin_root"
 printf 'Reload with: omarchy restart shell\n'

@@ -1,0 +1,12 @@
+# Plugin development progress
+Plan: docs/superpowers/plans/2026-10-21-face-auth-plugin.md
+Base: 3df9269
+Baseline: bash tests/run.sh passed, 45 Python tests + policy/shell/PAM compilation/QML syntax; shellcheck unavailable.
+Isolation: native create_worktree returned Not a git repository; a separate clone/feature branch was created inside the writable workspace.
+Preflight: current host Commons.Translations supports live plugin catalogs. Existing plugins predate it. Current core lock has newer fingerprint behavior; this release retains existing Surface lock service and does not replace it with untested core internals.
+Ruling: No additional plan approval — the user approved the prototype and explicitly requested plugin implementation. Development proceeds inline; deployment is separate from source development.
+Task 1: Shared UI implemented. Real offscreen QML tests passed for live English/Chinese/fallback, explicit method choices, literal markup-shaped identities and default/custom avatar states. An avatar transition regression (negative label height) was reproduced and fixed by separate fixed-anchor labels. Camera guidance is generic for external displays; no invented physical monitor direction or face coordinates.
+Task 2: Wake policy RED→GREEN verified with JS tests: manual lock stays idle, blank/resume gets one delayed attempt, duplicate wakes are ignored, mode/blank/suspend cancel pending timers, stale epochs cannot unlock. Real Wayland service compilation passed without instantiating auth services.
+Task 3: Locale parser/catalog and deployer RED→GREEN tests passed. PTY tests passed in English and Chinese (53-test intermediate Python suite passed); new installer tests verify full upgrade/restore and rejection of active locks. Resource preflight also rejects symlink and non-directory targets before writing.
+Ruling: Retain existing Howdy matcher process ownership limitation and earlier fingerprint behavior — replacing the authentication backend is outside the approved UI/i18n scope. Cost: camera cancellation/power bounds and newest stock fingerprint enhancements still require separate backend work and real-device acceptance.
+Ruling: Terminal language lookup uses the PAM user's passwd home and standard .config path, rather than untrusted environment paths — protects privileged helper lookup. Cost: custom XDG config homes do not currently influence terminal language selection; documented explicitly.

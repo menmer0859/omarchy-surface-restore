@@ -1,14 +1,18 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import Quickshell.Services.Polkit
+import Quickshell.Services.Polkit as Polkit
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "PolkitModel.js" as PolkitModel
+import "FaceUi" as FaceUi
 
 Item {
   id: root
+
+  property bool reducedMotion: Style.reduceMotion
+  FaceUi.AuthStrings { id: strings }
 
   property string fontFamily: Style.font.menuFamily
   // Bound to the central [polkit] section in shell.toml via Color.qml.
@@ -61,6 +65,8 @@ Item {
   }
 
   function selectedIdentityLabel() {
+    if (!activeIdentity) return strings.t("admin.unknown")
+    if (activeIdentity.isGroup) return strings.t("admin.group").arg(activeIdentity.displayName || activeIdentity.name)
     return PolkitModel.identityLabel(activeIdentity)
   }
 
@@ -69,7 +75,7 @@ Item {
     if (!flow || submitted || faceCheckPending) return
     var index = PolkitModel.nextIdentityIndex(flow.identities, flow.selectedIdentity)
     if (index < 0) return
-    passwordInput.text = ""
+    authView.passwordText = ""
     faceFallbackActive = false
     faceCheckPending = false
     flow.selectedIdentity = flow.identities[index]
@@ -96,14 +102,14 @@ Item {
     submitted = false
     faceCheckPending = false
     faceFallbackActive = false
-    passwordInput.text = ""
+    authView.passwordText = ""
   }
 
   function syncFromFlow() {
     var flow = polkitAgent.flow
     if (!flow) return
 
-    currentMessage = String(flow.message || "Authentication is needed...")
+    currentMessage = String(flow.message || "")
     currentPrompt = String(flow.inputPrompt || "")
     currentSupplementary = String(flow.supplementaryMessage || "")
     responseRequired = !!flow.isResponseRequired
@@ -113,7 +119,7 @@ Item {
     if (responseRequired && !PolkitModel.isFaceConsentPrompt(currentPrompt)) {
       if (faceCheckPending) faceFallbackActive = true
       faceCheckPending = false
-      faceFallbackActive = faceFallbackActive && currentPrompt.toLowerCase().indexOf("password") !== -1
+      // Keep failure state for non-English PAM prompts as well.
     }
     if (responseRequired) submitted = false
   }
@@ -124,7 +130,7 @@ Item {
     submitted = false
     faceFallbackActive = false
     faceCheckPending = false
-    passwordInput.text = ""
+    authView.passwordText = ""
     refreshLidState()
     syncFromFlow()
     Qt.callLater(refocus)
@@ -134,8 +140,8 @@ Item {
     if (!dialogVisible) return
     // In fingerprint mode there is no field to type into — park focus on the
     // key catcher so Escape still cancels; otherwise focus the password field.
-    if (fingerprintMode || faceConsentMode || faceCheckPending) keyCatcher.forceActiveFocus()
-    else passwordInput.forceActiveFocus()
+    if (fingerprintMode || faceConsentMode || faceCheckPending) authView.forceActiveFocus()
+    else authView.focusInput()
   }
 
   function submitFaceConsent(useFace) {
@@ -144,9 +150,9 @@ Item {
     faceFallbackActive = false
     faceCheckPending = useFace
     submitted = true
-    passwordInput.text = ""
+    authView.passwordText = ""
     flow.submit(useFace ? "y" : "n")
-    keyCatcher.forceActiveFocus()
+    authView.forceActiveFocus()
   }
 
   function submitResponse() {
@@ -159,14 +165,14 @@ Item {
     submitted = true
     errorFlash = false
     faceFallbackActive = false
-    flow.submit(passwordInput.text)
-    passwordInput.text = ""
-    keyCatcher.forceActiveFocus()
+    flow.submit(authView.passwordText)
+    authView.passwordText = ""
+    authView.forceActiveFocus()
   }
 
   function cancelRequest() {
     var flow = polkitAgent.flow
-    passwordInput.text = ""
+    authView.passwordText = ""
     submitted = false
     closing = true
     closeTimer.restart()
@@ -178,9 +184,9 @@ Item {
     faceFallbackActive = faceFallbackActive || faceCheckPending
     faceCheckPending = false
     errorFlash = true
-    passwordInput.text = ""
+    authView.passwordText = ""
     errorTimer.restart()
-    shakeAnimation.restart()
+    if (!reducedMotion && !faceFallbackActive) shakeAnimation.restart()
     Qt.callLater(refocus)
   }
 
@@ -203,9 +209,10 @@ Item {
 
   SequentialAnimation {
     id: shakeAnimation
-    NumberAnimation { target: root; property: "shakeOffset"; to: -8; duration: 35; easing.type: Easing.OutQuad }
-    NumberAnimation { target: root; property: "shakeOffset"; to: 8; duration: 50; easing.type: Easing.InOutQuad }
-    NumberAnimation { target: root; property: "shakeOffset"; to: 0; duration: 55; easing.type: Easing.OutQuad }
+    NumberAnimation { target: root; property: "shakeOffset"; to: -7; duration: 50 }
+    NumberAnimation { target: root; property: "shakeOffset"; to: 6; duration: 70 }
+    NumberAnimation { target: root; property: "shakeOffset"; to: -3; duration: 80 }
+    NumberAnimation { target: root; property: "shakeOffset"; to: 0; duration: 140 }
   }
   FileView {
     path: "/etc/pam.d/polkit-1"
@@ -223,7 +230,7 @@ Item {
     onExited: root.laptopClosed = String(laptopClosedOut.text || "").trim() === "closed"
   }
 
-  PolkitAgent {
+  Polkit.PolkitAgent {
     id: polkitAgent
     path: "/org/omarchy/PolkitAgent"
 
@@ -243,7 +250,7 @@ Item {
 
     function onIsResponseRequiredChanged() {
       root.syncFromFlow()
-      if (!polkitAgent.flow || !polkitAgent.flow.isResponseRequired) passwordInput.text = ""
+      if (!polkitAgent.flow || !polkitAgent.flow.isResponseRequired) authView.passwordText = ""
       Qt.callLater(root.refocus)
     }
 
@@ -277,242 +284,40 @@ Item {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
-
-    Rectangle {
+    Rectangle { anchors.fill: parent; color: root.scrim }
+    MouseArea { anchors.fill: parent; onClicked: root.refocus() }
+    Flickable {
       anchors.fill: parent
-      color: root.scrim
-    }
-
-    MouseArea {
-      anchors.fill: parent
-      onClicked: root.refocus()
-    }
-
-    BorderSurface {
-      id: card
-      width: root.cardWidth
-      height: root.cardHeight
-      radius: root.cornerRadius
-      anchors.centerIn: parent
-      anchors.horizontalCenterOffset: root.shakeOffset
-      color: root.background
-      borderSpec: root.borderSpec
-      padding: root.contentMargin
-
-      MouseArea { anchors.fill: parent; onClicked: root.refocus() }
-
-      Item {
-        id: keyCatcher
-        anchors.fill: parent
-        focus: true
-
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function(event) {
-          if (event.key === Qt.Key_Escape) {
-            root.cancelRequest()
-            event.accepted = true
-          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.faceConsentMode) root.submitFaceConsent(false)
-            else if (root.responseRequired) root.submitResponse()
-            event.accepted = true
-          }
-        }
-      }
-
-      // Fingerprint mode shows just the sensor icon, centered and alone \u2014 no
-      // padlock, no field, no prompt text.
-      OpticalGlyph {
-        anchors.centerIn: parent
-        width: Math.round(root.fieldHeight * 0.7)
-        height: width
-        visible: root.fingerprintMode
-        text: "\udb80\ude37"
-        fontFamily: root.fontFamily
-        fontSize: Math.round(root.fieldHeight * 0.7)
-        color: root.errorFlash ? Color.polkit.textError : root.accent
-      }
-
-      Row {
-        id: cardRow
-        visible: !root.fingerprintMode && !root.faceConsentMode && !root.faceCheckPending
-        anchors.fill: parent
-        anchors.topMargin: card.contentTopInset
-        anchors.rightMargin: card.contentRightInset
-        anchors.bottomMargin: card.contentBottomInset
-        anchors.leftMargin: card.contentLeftInset
-        spacing: Style.space(14)
-
-        Text {
-          text: "\uf023"
-          color: root.errorFlash ? Color.polkit.textError : root.accent
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.iconLarge
-          width: Style.space(26)
-          height: root.fieldHeight
-          horizontalAlignment: Text.AlignHCenter
-          verticalAlignment: Text.AlignVCenter
-        }
-
-        Item {
-          width: parent.width - Style.space(40)
-          height: root.fieldHeight
-
-          TextInput {
-            id: passwordInput
-            anchors.fill: parent
-            verticalAlignment: TextInput.AlignVCenter
-            activeFocusOnPress: true
-            clip: true
-            selectionColor: Util.alpha(root.accent, 0.45)
-            selectedTextColor: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.iconLarge
-            echoMode: root.responseVisible ? TextInput.Normal : TextInput.Password
-            passwordCharacter: "\u2022"
-            color: root.errorFlash ? Color.polkit.textError : root.foreground
-            cursorVisible: activeFocus && !root.submitted && !root.errorFlash
-            readOnly: root.submitted || root.errorFlash
-            enabled: root.dialogVisible
-            onAccepted: root.submitResponse()
-            Keys.onPressed: function(event) {
-              if (event.key === Qt.Key_Escape) {
-                root.cancelRequest()
-                event.accepted = true
-              }
-            }
-          }
-
-          Text {
-            textFormat: Text.PlainText
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.errorFlash ? (root.faceFallbackActive ? "Face recognition failed. Enter password." : "Wrong") : (root.submitted ? "Checking..." : (root.faceFallbackActive ? "Face recognition failed. Enter password." : "Enter password"))
-            color: root.errorFlash ? Color.polkit.textError : root.foreground
-            opacity: root.errorFlash ? 1 : 0.36
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.iconLarge
-            elide: Text.ElideRight
-            visible: passwordInput.text.length === 0
-          }
-
-          Rectangle {
-            width: Math.max(1, Style.space(2))
-            height: Style.space(24)
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            color: root.errorFlash ? Color.polkit.textError : root.foreground
-            visible: passwordInput.visible && passwordInput.activeFocus && passwordInput.text.length === 0 && !root.submitted && !root.errorFlash
-          }
-
-          MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton
-            enabled: passwordInput.visible
-            onClicked: passwordInput.forceActiveFocus()
-          }
-        }
-      }
-
-      Row {
-        visible: root.faceConsentMode
-        anchors.fill: parent
-        spacing: Style.space(10)
-
-        Button {
-          width: (parent.width - parent.spacing) / 2
-          height: parent.height
-          text: "Use face"
-          iconText: "\uf2bd"
-          foreground: root.foreground
-          accent: root.accent
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          focusable: true
-          onClicked: root.submitFaceConsent(true)
-        }
-
-        Button {
-          width: (parent.width - parent.spacing) / 2
-          height: parent.height
-          text: "Use password"
-          iconText: "\uf023"
-          foreground: root.foreground
-          accent: root.accent
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          focusable: true
-          onClicked: root.submitFaceConsent(false)
-        }
-      }
-
-      Text {
-        anchors.centerIn: parent
-        visible: root.faceCheckPending
-        text: "Looking for your face…"
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-      }
-    }
-
-    Column {
-      width: Math.min(Math.max(justificationText.implicitWidth, identityText.implicitWidth, identityButton.implicitWidth) + Style.space(24), panel.width - Style.gapsOut * 2)
-      anchors.horizontalCenter: card.horizontalCenter
-      anchors.bottom: card.top
-      anchors.bottomMargin: Style.space(10)
-      spacing: Style.space(4)
-
-      Rectangle {
-        width: parent.width
-        height: Style.space(28)
-        radius: root.cornerRadius
-        color: root.background
-
-        Text {
-          id: justificationText
-          textFormat: Text.PlainText
-          anchors.fill: parent
-          anchors.leftMargin: Style.space(12)
-          anchors.rightMargin: Style.space(12)
-          text: root.authorizationLabel(root.currentMessage)
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          horizontalAlignment: Text.AlignHCenter
-          verticalAlignment: Text.AlignVCenter
-          elide: Text.ElideMiddle
-        }
-      }
-
-      Text {
-        id: identityText
-        width: parent.width
-        height: Style.space(26)
-        visible: root.allowedIdentities.length === 1
-        text: "Authenticating as " + root.selectedIdentityLabel()
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-      }
-
-      Button {
-        id: identityButton
-        width: parent.width
-        height: Style.space(28)
-        visible: root.allowedIdentities.length > 1
-        enabled: !root.submitted && !root.faceCheckPending
-        text: "Authenticating as " + root.selectedIdentityLabel() + " · Change"
-        iconText: "\uf2bd"
-        foreground: root.foreground
-        accent: root.accent
-        fontFamily: root.fontFamily
-        fontSize: Style.font.bodySmall
-        focusable: true
-        onClicked: root.cycleIdentity()
+      contentWidth: width
+      contentHeight: Math.max(height, authView.implicitHeight + 48)
+      boundsBehavior: Flickable.StopAtBounds
+      clip: true
+      AuthorizationView {
+        id: authView
+        width: Math.min(480, parent.width - 48)
+        height: implicitHeight
+        x: (parent.width - width) / 2 + root.shakeOffset
+        y: Math.max(24, (parent.height - height) / 2)
+        userName: root.selectedIdentityLabel()
+        avatarPath: root.activeIdentity && !root.activeIdentity.isGroup && root.activeIdentity.name === (Quickshell.env("USER") || Quickshell.env("LOGNAME")) ? Quickshell.env("HOME") + "/.face" : ""
+        message: root.currentMessage || strings.t("admin.message")
+        consentMode: root.faceConsentMode
+        scanning: root.faceCheckPending
+        fingerprintMode: root.fingerprintMode
+        passwordMode: root.responseRequired && !root.faceConsentMode && !root.faceCheckPending
+        busy: root.submitted
+        passwordError: root.errorFlash && !root.faceFallbackActive
+        faceFailed: root.faceFallbackActive
+        responseVisible: root.responseVisible
+        responsePrompt: root.currentPrompt
+        externalDisplay: panel.screen && !/^(eDP|LVDS|DSI)/i.test(panel.screen.name)
+        reducedMotion: root.reducedMotion
+        canChangeIdentity: root.allowedIdentities.length > 1
+        onFaceConsent: function(useFace) { if (root.faceConsentMode) root.submitFaceConsent(useFace) }
+        onSubmitted: root.submitResponse()
+        onCancelled: root.cancelRequest()
+        onChangeIdentity: root.cycleIdentity()
+        onEditing: root.errorFlash = false
       }
     }
   }
