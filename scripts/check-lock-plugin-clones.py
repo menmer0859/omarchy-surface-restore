@@ -1,0 +1,1 @@
+../modules/face-auth/scripts/check-lock-plugin-clones.py

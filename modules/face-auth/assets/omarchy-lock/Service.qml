@@ -1,0 +1,971 @@
+import QtQuick
+import "FaceAttemptPolicy.js" as FaceAttemptPolicy
+import "DisplayWakePolicy.js" as DisplayWakePolicy
+import "LockActivityPolicy.js" as LockActivityPolicy
+import Quickshell
+import Quickshell.Io
+import Quickshell.Services.Pam
+import Quickshell.Wayland
+import "FaceUi" as FaceUi
+import qs.Commons
+
+Item {
+    id: root
+
+    property var shell: null
+    property string omarchyPath: ""
+
+    readonly property string home: Quickshell.env("HOME")
+    readonly property string stateHome: home + "/.local/state"
+    readonly property string userName: Quickshell.env("USER") || Quickshell.env("LOGNAME")
+    readonly property string currentBackgroundLink: stateHome + "/omarchy/current/background"
+
+    property bool lockRequested: false
+    property bool pendingSessionLock: false
+    property bool authenticatingPassword: false
+    property bool fingerprintAuthenticating: false
+    property bool passwordPamConfigured: false
+    property bool fingerprintConfigured: false
+    property bool faceAuthenticating: false
+    property bool faceConfigured: false
+    property var facePolicyState: FaceAttemptPolicy.createState()
+    property var activeFacePam: null
+    property int facePamLockId: 0
+    property int facePamAttemptId: 0
+    property double faceAttemptStartedAt: 0
+    property bool displayBlanked: false
+    property var activityState: LockActivityPolicy.createState()
+    property var monitorWakeState: DisplayWakePolicy.createState()
+    property bool suspendSignalPending: false
+    property string unlockMode: "password"
+    property bool previewVisible: false
+    property string enteredPassword: ""
+    property string pendingPassword: ""
+    property bool passwordFailed: false
+    FaceUi.AuthStrings { id: strings }
+    readonly property string failureMessage: passwordFailed ? strings.t("password.failed") : ""
+    property int failedAttempts: 0
+    property string backgroundPath: ""
+    property int backgroundVersion: 0
+    property string lastEvent: "init"
+    property string lastEventAt: ""
+    property bool strandedLock: false
+    property bool strandedLockResolved: false
+
+    readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
+    readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
+    readonly property string facePhase: facePolicyState.phase
+
+    function realScreenCount() {
+        var screens = Quickshell.screens || [];
+        var count = 0;
+
+        for (var i = 0; i < screens.length; i++) {
+            var screen = screens[i];
+            if (screen && screen.name && screen.width > 0 && screen.height > 0)
+                count += 1;
+        }
+
+        return count;
+    }
+
+    function hasRealScreen() {
+        return realScreenCount() > 0;
+    }
+
+    function queueSessionLock() {
+        pendingSessionLock = true;
+        if (!sessionLockStabilizeTimer.running)
+            logEvent("lock-pending: screen-stabilizing");
+        sessionLockStabilizeTimer.restart();
+        if (!pendingSessionLockTimer.running)
+            pendingSessionLockTimer.start();
+    }
+
+    function requestSessionLock() {
+        if (!lockRequested || sessionLock.locked || sessionLock.secure)
+            return;
+        if (sessionLockStabilizeTimer.running)
+            return;
+        if (!hasRealScreen()) {
+            if (!pendingSessionLock || lastEvent !== "lock-pending: no-real-screen")
+                logEvent("lock-pending: no-real-screen");
+            pendingSessionLock = true;
+            if (!pendingSessionLockTimer.running)
+                pendingSessionLockTimer.start();
+            return;
+        }
+
+        pendingSessionLock = false;
+        pendingSessionLockTimer.stop();
+        sessionLock.locked = true;
+    }
+
+    // ext-session-lock outlives its client, and a restart carries no lock over, so
+    // a session locked this early is an orphan behind Hyprland's failsafe. Outputs
+    // are often still absent here, so ask until the answer means something.
+    function checkStrandedLock() {
+        if (strandedLockResolved || strandedLockCheckProc.running)
+            return;
+
+        // A lock this shell took is nobody's orphan.
+        if (locked || lockRequested) {
+            strandedLockResolved = true;
+            return;
+        }
+
+        strandedLockCheckProc.running = true;
+    }
+
+    function recoverStrandedLock() {
+        if (!strandedLock || locked || !passwordPamConfigured)
+            return;
+        strandedLock = false;
+        logEvent("lock-stranded: recovering");
+        beginLock();
+    }
+
+    function refreshBackground() {
+        if (!readlinkProc.running)
+            readlinkProc.running = true;
+    }
+
+    function refreshFingerprintStatus() {
+        if (!fingerprintCheckProc.running)
+            fingerprintCheckProc.running = true;
+    }
+
+    function refreshFaceStatus() {
+        if (!faceCheckProc.running)
+            faceCheckProc.running = true;
+    }
+
+    function logEvent(event) {
+        lastEvent = event;
+        lastEventAt = new Date().toISOString();
+        console.log("omarchy lock " + lastEventAt + " " + event);
+    }
+
+    function abortFaceAttempt() {
+        faceAttemptTimer.stop();
+        faceAttemptStartedAt = 0;
+        facePamLockId = 0;
+        facePamAttemptId = 0;
+        faceAuthenticating = false;
+        if (activeFacePam) {
+            var context = activeFacePam;
+            activeFacePam = null;
+            context.abort();
+            context.destroy();
+        }
+    }
+
+    function applyFaceEvent(event) {
+        if (event.lockId === undefined)
+            event.lockId = facePolicyState.lockId;
+        var result = FaceAttemptPolicy.transition(facePolicyState, event);
+        facePolicyState = result.state;
+        faceAuthenticating = facePolicyState.phase === "scanning";
+
+        if (event.type === "FACE_RESULT" || event.type === "FACE_TIMEOUT" || event.type === "PASSWORD_SELECTED" || event.type === "UNLOCKED" || event.type === "SUSPEND")
+            faceAttemptTimer.stop();
+
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "START_FACE")
+                startFaceAttempt();
+            else if (result.effects[i] === "ABORT_FACE")
+                abortFaceAttempt();
+            else if (result.effects[i] === "START_WAKE_DELAY") {
+                wakeSettleTimer.lockId = facePolicyState.lockId;
+                wakeSettleTimer.wakeId = facePolicyState.wakeId;
+                wakeSettleTimer.restart();
+                runWake();
+            } else if (result.effects[i] === "STOP_WAKE_DELAY")
+                wakeSettleTimer.stop();
+            else if (result.effects[i] === "UNLOCK")
+                finishUnlock();
+        }
+    }
+
+    function resetAuthenticationState() {
+        enteredPassword = "";
+        pendingPassword = "";
+        passwordFailed = false;
+        failedAttempts = 0;
+        authenticatingPassword = false;
+        fingerprintAuthenticating = false;
+        fingerprintRetryTimer.stop();
+        wakeSettleTimer.stop();
+        abortFaceAttempt();
+        if (passwordPam.active)
+            passwordPam.abort();
+        if (fingerprintPam.active)
+            fingerprintPam.abort();
+    }
+
+    function setUnlockMode(mode) {
+        if (mode !== "password" && (mode !== "face" || !faceConfigured))
+            return;
+        if (unlockMode === mode && mode !== "face")
+            return;
+        var returningFromPassword = unlockMode === "password";
+        unlockMode = mode;
+        enteredPassword = "";
+        passwordFailed = false;
+        if (mode === "password") {
+            applyFaceEvent({ type: "PASSWORD_SELECTED" });
+        } else {
+            applyFaceEvent({ type: returningFromPassword ? "FACE_RETURNED" : "FACE_SELECTED" });
+        }
+        runWake();
+    }
+
+    function beginLock() {
+        if (!passwordPamConfigured) {
+            logEvent("lock-denied: missing-pam");
+            return false;
+        }
+
+        resetAuthenticationState();
+        invalidateMonitorObservations();
+        applyFaceEvent({ type: "LOCK_REQUESTED", faceAvailable: faceConfigured });
+        unlockMode = faceConfigured ? "face" : "password";
+        lockRequested = true;
+        armBlankTimer();
+        logEvent("lock-requested");
+        queueSessionLock();
+
+        Qt.callLater(function () {
+            root.refreshBackground();
+            root.refreshFingerprintStatus();
+            root.refreshFaceStatus();
+        });
+
+        return true;
+    }
+
+    function finishUnlock() {
+        if (!root.locked && !lockRequested)
+            return;
+        invalidateMonitorObservations();
+        applyFaceEvent({ type: "UNLOCKED" });
+        lockRequested = false;
+        pendingSessionLock = false;
+        sessionLockStabilizeTimer.stop();
+        pendingSessionLockTimer.stop();
+        resetAuthenticationState();
+        idleBlankTimer.stop();
+        sessionLock.locked = false;
+        logEvent("unlocked");
+        runWake();
+    }
+
+    function armBlankTimer() {
+        var delay = LockActivityPolicy.idleDelay({
+            passwordMode: unlockMode === "password",
+            passwordLength: enteredPassword.length,
+            busy: authenticatingPassword || faceAuthenticating || facePhase === "wake_delay",
+            blanked: !lockRequested || displayBlanked
+        });
+        idleBlankTimer.stop();
+        if (delay === 0) return;
+        idleBlankTimer.interval = delay;
+        idleBlankTimer.armedAt = Date.now();
+        idleBlankTimer.restart();
+    }
+
+    onEnteredPasswordChanged: armBlankTimer()
+
+    function clearBlankInput() {
+        enteredPassword = "";
+        pendingPassword = "";
+        passwordFailed = false;
+        authenticatingPassword = false;
+        if (passwordPam.active) passwordPam.abort();
+        unlockMode = faceConfigured ? "face" : "password";
+    }
+
+    function applyActivityEvent(event) {
+        var result = LockActivityPolicy.transition(activityState, event);
+        activityState = result.state;
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "WAKE") {
+                logEvent("display-command=wake");
+                wakeProcess.running = true;
+            }
+            else if (result.effects[i] === "BLANK") {
+                logEvent("display-command=blank");
+                blankProcess.running = true;
+            }
+        }
+    }
+
+    function invalidateMonitorObservations() {
+        monitorWakeState = DisplayWakePolicy.invalidate(monitorWakeState);
+    }
+
+    function runWake(deliberate, force) {
+        applyActivityEvent({ type: "WAKE", deliberate: deliberate !== false, force: force === true || !lockRequested, now: Date.now() });
+        if (!activityState.blanked) {
+            if (displayBlanked) invalidateMonitorObservations();
+            displayBlanked = false;
+        }
+        if (lockRequested && !displayBlanked)
+            armBlankTimer();
+    }
+
+    function handleWakeRequested(deliberate) {
+        if (!lockRequested)
+            return;
+        var wasBlank = displayBlanked;
+        var confirmedOff = monitorWakeState.offObserved;
+        runWake(deliberate);
+        if (wasBlank && !displayBlanked) applyFaceEvent({ type: confirmedOff ? "SCREEN_WOKE" : "DISPLAY_ACTIVE" });
+    }
+
+    function runBlank() {
+        if (lockRequested) {
+            idleBlankTimer.stop();
+            invalidateMonitorObservations();
+            clearBlankInput();
+            applyFaceEvent({ type: "DISPLAY_BLANKED" });
+            displayBlanked = true;
+            idleBlankTimer.stop();
+            applyActivityEvent({ type: "BLANK", now: Date.now() });
+        }
+    }
+
+    function submitPassword(value) {
+        var password = String(value || "");
+        if (!lockRequested || displayBlanked || passwordPam.active || authenticatingPassword || password.length === 0)
+            return;
+        applyFaceEvent({ type: "PASSWORD_SELECTED" });
+        runWake();
+        pendingPassword = password;
+        passwordFailed = false;
+        authenticatingPassword = true;
+
+        if (!passwordPam.start()) {
+            handlePasswordFailure();
+            return;
+        }
+
+        Qt.callLater(respondToPasswordPrompt);
+    }
+
+    function respondToPasswordPrompt() {
+        if (!authenticatingPassword || !passwordPam.active || !passwordPam.responseRequired)
+            return;
+        passwordPam.respond(pendingPassword);
+    }
+
+    function handlePasswordFailure() {
+        if (!lockRequested || displayBlanked)
+            return;
+        authenticatingPassword = false;
+        enteredPassword = "";
+        pendingPassword = "";
+        failedAttempts += 1;
+        passwordFailed = true;
+        runWake();
+    }
+
+    function startFingerprint() {
+        if (!lockRequested || !sessionLock.secure || !fingerprintConfigured)
+            return;
+        if (fingerprintPam.active || fingerprintAuthenticating)
+            return;
+        fingerprintAuthenticating = true;
+        if (!fingerprintPam.start()) {
+            fingerprintAuthenticating = false;
+        }
+    }
+
+    function handleFingerprintFinished(result) {
+        fingerprintAuthenticating = false;
+
+        if (!lockRequested)
+            return;
+        if (result === PamResult.Success) {
+            finishUnlock();
+        } else if (fingerprintConfigured) {
+            fingerprintRetryTimer.restart();
+        }
+    }
+
+    function startFaceAttempt() {
+        if (!lockRequested || !sessionLock.secure || !faceConfigured || unlockMode !== "face")
+            return;
+        if (activeFacePam || faceAttemptTimer.running)
+            return;
+
+        var lockId = facePolicyState.lockId;
+        var attemptId = facePolicyState.attemptId;
+        var context = facePamFactory.createObject(root);
+        if (!context) {
+            applyFaceEvent({ type: "FACE_RESULT", lockId: lockId, attemptId: attemptId, result: "failure" });
+            return;
+        }
+        activeFacePam = context;
+        facePamLockId = lockId;
+        facePamAttemptId = attemptId;
+        faceAttemptStartedAt = Date.now();
+        faceAuthenticating = true;
+        faceAttemptTimer.start();
+        context.completed.connect(function (result) {
+            root.handleFaceFinished(result, lockId, attemptId, context);
+        });
+        // Check lid before starting a camera, including explicit attempts.
+        faceLidGate.lockId = lockId;
+        faceLidGate.attemptId = attemptId;
+        if (faceLidGate.running) {
+            handleFaceFinished(PamResult.Error, lockId, attemptId, context);
+        } else faceLidGate.running = true;
+    }
+
+    function handleFaceFinished(result, lockId, attemptId, context) {
+        if (context !== activeFacePam || lockId !== facePamLockId || attemptId !== facePamAttemptId)
+            return;
+        if (lockId !== facePolicyState.lockId || attemptId !== facePolicyState.attemptId || facePolicyState.phase !== "scanning")
+            return;
+
+        var elapsed = Date.now() - faceAttemptStartedAt;
+        activeFacePam = null;
+        facePamLockId = 0;
+        facePamAttemptId = 0;
+        faceAttemptStartedAt = 0;
+        faceAttemptTimer.stop();
+        context.destroy();
+        applyFaceEvent({
+            type: "FACE_RESULT",
+            lockId: lockId,
+            attemptId: attemptId,
+            result: result === PamResult.Success && elapsed < faceAttemptTimer.interval ? "success" : "failure"
+        });
+    }
+
+    Process {
+        id: faceLidGate
+        property int lockId: 0
+        property int attemptId: 0
+        command: ["bash", "-c", "omarchy-hw-laptop-closed; code=$?; test $code -eq 1"]
+        onExited: function(code) {
+            if (!root.activeFacePam || lockId !== root.facePamLockId || attemptId !== root.facePamAttemptId || root.facePhase !== "scanning") return;
+            if (code !== 0 || !root.activeFacePam.start()) root.handleFaceFinished(PamResult.Error, lockId, attemptId, root.activeFacePam);
+        }
+    }
+
+    WlSessionLock {
+        id: sessionLock
+
+        locked: false
+
+        onSecureStateChanged: {
+            root.logEvent("secure=" + secure);
+            if (secure) {
+                root.pendingSessionLock = false;
+                sessionLockStabilizeTimer.stop();
+                pendingSessionLockTimer.stop();
+                root.applyFaceEvent({ type: "LOCK_SECURE" });
+                root.startFingerprint();
+            }
+        }
+
+        onLockStateChanged: {
+            root.logEvent("session-locked=" + locked);
+
+            if (locked) {
+                root.pendingSessionLock = false;
+                sessionLockStabilizeTimer.stop();
+                pendingSessionLockTimer.stop();
+            }
+
+            if (!locked && root.lockRequested) {
+                root.applyFaceEvent({ type: "UNLOCKED" });
+                root.lockRequested = false;
+                root.pendingSessionLock = false;
+                sessionLockStabilizeTimer.stop();
+                pendingSessionLockTimer.stop();
+                root.resetAuthenticationState();
+                root.runWake();
+            }
+        }
+
+        WlSessionLockSurface {
+            id: lockSurface
+            color: Color.background
+
+            LockView {
+                id: lockView
+                anchors.fill: parent
+                backgroundPath: root.backgroundPath
+                backgroundVersion: root.backgroundVersion
+                fingerprintConfigured: root.fingerprintConfigured
+                faceConfigured: root.faceConfigured
+                faceAuthenticating: root.faceAuthenticating
+                facePhase: root.facePhase
+                unlockMode: root.unlockMode
+                authenticatingPassword: root.authenticatingPassword
+                failureMessage: root.failureMessage
+                failedAttempts: root.failedAttempts
+                externalDisplay: lockSurface.screen && !/^(eDP|LVDS|DSI)/i.test(lockSurface.screen.name)
+                inputEnabled: root.lockRequested
+                loadBackground: root.locked
+                passwordText: root.enteredPassword
+                onPasswordTextEdited: function (password) {
+                    root.enteredPassword = password;
+                }
+                onSubmitPassword: function (password) {
+                    root.submitPassword(password);
+                }
+                onClearFailureRequested: root.passwordFailed = false
+                onWakeRequested: function(deliberate) { root.handleWakeRequested(deliberate); }
+                onFaceIntentRequested: root.applyFaceEvent({ type: "INTENT" })
+                onBlankRequested: root.runBlank()
+                onFaceRetryRequested: function () {
+                    root.unlockMode = "face";
+                    root.applyFaceEvent({ type: "FACE_SELECTED" });
+                }
+                onUnlockModeRequested: function (mode) {
+                    root.setUnlockMode(mode);
+                }
+            }
+        }
+    }
+
+    PanelWindow {
+        id: previewWindow
+        visible: root.previewVisible
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        color: "transparent"
+        WlrLayershell.namespace: "omarchy-lock-preview"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        exclusionMode: ExclusionMode.Ignore
+
+        LockView {
+            anchors.fill: parent
+            backgroundPath: root.backgroundPath
+            backgroundVersion: root.backgroundVersion
+            fingerprintConfigured: root.fingerprintConfigured
+            faceConfigured: root.faceConfigured
+            faceAuthenticating: false
+            facePhase: "inactive"
+            unlockMode: root.faceConfigured ? "face" : "password"
+            authenticatingPassword: false
+            failureMessage: ""
+            failedAttempts: 0
+            inputEnabled: false
+            loadBackground: root.previewVisible
+            passwordText: ""
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: root.previewVisible = false
+        }
+    }
+
+    PamContext {
+        id: passwordPam
+        config: "omarchy-lock-password"
+        user: root.userName
+
+        onResponseRequiredChanged: root.respondToPasswordPrompt()
+        onPamMessage: root.respondToPasswordPrompt()
+
+        onCompleted: function (result) {
+            var expected = root.authenticatingPassword;
+            root.authenticatingPassword = false;
+            root.pendingPassword = "";
+
+            if (!expected || !root.lockRequested || root.displayBlanked)
+                return;
+            if (result === PamResult.Success)
+                root.finishUnlock();
+            else
+                root.handlePasswordFailure();
+        }
+
+        onError: function (error) {
+            if (root.authenticatingPassword) root.handlePasswordFailure();
+        }
+    }
+
+    PamContext {
+        id: fingerprintPam
+        config: "omarchy-lock-fingerprint"
+        user: root.userName
+
+        onCompleted: function (result) {
+            root.handleFingerprintFinished(result);
+        }
+
+        onError: function (error) {
+            root.fingerprintAuthenticating = false;
+            if (root.lockRequested && root.fingerprintConfigured)
+                fingerprintRetryTimer.restart();
+        }
+    }
+
+    Timer {
+        id: fingerprintRetryTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.startFingerprint()
+    }
+
+    Component {
+        id: facePamFactory
+
+        PamContext {
+            config: "omarchy-lock-face"
+            user: root.userName
+        }
+    }
+
+    Timer {
+        id: faceAttemptTimer
+        interval: 12000
+        repeat: false
+        onTriggered: root.applyFaceEvent({
+            type: "FACE_TIMEOUT",
+            lockId: root.facePamLockId,
+            attemptId: root.facePamAttemptId
+        });
+    }
+
+    Timer {
+        id: wakeSettleTimer
+        interval: 1500
+        repeat: false
+        property int lockId: 0
+        property int wakeId: 0
+        onTriggered: root.applyFaceEvent({ type: "WAKE_DELAY_ELAPSED", lockId: lockId, wakeId: wakeId })
+    }
+
+    Process {
+        id: suspendEventProc
+        command: ["dbus-monitor", "--system", "type='signal',sender='org.freedesktop.login1',path='/org/freedesktop/login1',interface='org.freedesktop.login1.Manager',member='PrepareForSleep'"]
+        running: true
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function (data) {
+                var line = String(data || "");
+                if (line.indexOf("member=PrepareForSleep") >= 0) {
+                    root.suspendSignalPending = true;
+                } else if (root.suspendSignalPending && line.indexOf("boolean true") >= 0) {
+                    root.suspendSignalPending = false;
+                    root.invalidateMonitorObservations();
+                    root.displayBlanked = true;
+                    root.applyActivityEvent({ type: "OBSERVED_BLANK" });
+                    root.clearBlankInput();
+                    root.applyFaceEvent({ type: "SUSPEND" });
+                } else if (root.suspendSignalPending && line.indexOf("boolean false") >= 0) {
+                    root.suspendSignalPending = false;
+                    root.invalidateMonitorObservations();
+                    root.applyFaceEvent({ type: "RESUME" });
+                }
+            }
+        }
+        onExited: function (exitCode, exitStatus) {
+            root.logEvent("suspend-monitor-exit code=" + exitCode + " status=" + exitStatus);
+        }
+    }
+
+    Process {
+        id: readlinkProc
+        command: ["readlink", "-f", root.currentBackgroundLink]
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                var next = String(text || "").trim();
+                if (next !== root.backgroundPath) {
+                    root.backgroundPath = next;
+                    root.backgroundVersion += 1;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: fingerprintCheckProc
+        command: ["bash", "-c", "if [[ -f /etc/pam.d/omarchy-lock-fingerprint ]] && command -v fprintd-list >/dev/null 2>&1 && fprintd-list \"$USER\" 2>/dev/null | grep -qi finger; then echo yes; else echo no; fi"]
+        stdout: StdioCollector {
+            id: fingerprintCheckStdout
+            waitForEnd: true
+        }
+        onExited: {
+            root.fingerprintConfigured = String(fingerprintCheckStdout.text || "").trim() === "yes";
+            if (root.lockRequested && root.fingerprintConfigured)
+                root.startFingerprint();
+            else if (!root.fingerprintConfigured && fingerprintPam.active)
+                fingerprintPam.abort();
+        }
+    }
+
+    Process {
+        id: faceCheckProc
+        command: ["bash", "-c", "test -s /etc/howdy/models/$USER.dat && test -f /etc/pam.d/omarchy-lock-face && echo yes"]
+        stdout: StdioCollector {
+            id: faceCheckStdout
+            waitForEnd: true
+        }
+        onExited: {
+            root.faceConfigured = String(faceCheckStdout.text || "").trim() === "yes";
+            root.applyFaceEvent({ type: "FACE_AVAILABILITY_CHANGED", faceAvailable: root.faceConfigured });
+            if (!root.faceConfigured && root.facePhase === "scanning") {
+                root.applyFaceEvent({
+                    type: "FACE_TIMEOUT",
+                    lockId: root.facePolicyState.lockId,
+                    attemptId: root.facePolicyState.attemptId
+                });
+            }
+            if (!root.faceConfigured && root.unlockMode === "face")
+                root.unlockMode = "password";
+            else if (root.faceConfigured && root.facePhase === "locked_idle" && root.unlockMode === "password")
+                root.unlockMode = "face";
+        }
+    }
+
+    Process {
+        id: strandedLockCheckProc
+        command: ["bash", "-c", "omarchy-hyprland-session-locked"]
+        onExited: function (exitCode) {
+            // No output to read the lock off yet.
+            if (exitCode === 2)
+                return;
+            root.strandedLockResolved = true;
+
+            // A lock taken while this was in flight is this shell's own.
+            root.strandedLock = exitCode === 0 && !root.locked && !root.lockRequested;
+            root.recoverStrandedLock();
+        }
+    }
+
+    Process {
+        id: wakeProcess
+        command: ["bash", "-c", "omarchy-system-wake"]
+        onExited: root.applyActivityEvent({ type: "WAKE_FINISHED", now: Date.now() })
+    }
+
+    Process {
+        id: blankProcess
+        command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+        onExited: {
+            root.applyActivityEvent({ type: "BLANK_FINISHED", now: Date.now() });
+            if (!root.activityState.blanked) {
+                root.displayBlanked = false;
+                root.applyFaceEvent({ type: "DISPLAY_ACTIVE" });
+                root.armBlankTimer();
+            }
+        }
+    }
+
+    function applyMonitorState(raw, sampleLockId, sampleEpoch) {
+        if (!lockRequested || sampleLockId !== facePolicyState.lockId) return;
+        var monitors;
+        try { monitors = JSON.parse(raw); } catch (error) { return; }
+        var result = DisplayWakePolicy.observe(monitorWakeState, sampleEpoch, monitors);
+        monitorWakeState = result.state;
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "DISPLAY_BLANKED") {
+                displayBlanked = true;
+                applyActivityEvent({ type: "OBSERVED_BLANK" });
+                clearBlankInput();
+                applyFaceEvent({ type: "DISPLAY_BLANKED" });
+            } else if (result.effects[i] === "SCREEN_WOKE") {
+                runWake();
+                applyFaceEvent({ type: "SCREEN_WOKE" });
+            }
+        }
+    }
+
+    Process {
+        id: monitorState
+        property int sampleLockId: 0
+        property int sampleEpoch: 0
+        command: ["hyprctl", "monitors", "-j"]
+        stdout: StdioCollector { id: monitorOutput; waitForEnd: true }
+        onExited: function(code) {
+            if (code === 0) root.applyMonitorState(monitorOutput.text, sampleLockId, sampleEpoch);
+        }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.lockRequested
+        onTriggered: {
+            if (!monitorState.running && !blankProcess.running && !root.activityState.blankPending) {
+                monitorState.sampleLockId = root.facePolicyState.lockId;
+                monitorState.sampleEpoch = root.monitorWakeState.epoch;
+                monitorState.running = true;
+            }
+        }
+    }
+    onFacePhaseChanged: {
+        if (facePhase === "scanning" || facePhase === "wake_delay") idleBlankTimer.stop();
+        else if (lockRequested && !displayBlanked) armBlankTimer();
+    }
+
+    Timer {
+        id: idleBlankTimer
+        interval: 30000
+        repeat: false
+        property double armedAt: 0
+        onTriggered: {
+            // A countdown frozen by suspend fires right after resume, which would
+            // blank the freshly woken unlock screen under the user. Wall-clock time
+            // exposes the gap: take a fresh run-up instead of blanking.
+            if (Date.now() - armedAt > interval + 2000) {
+                root.armBlankTimer();
+                return;
+            }
+            // Only a password check in flight should hold the display up. The
+            // fingerprint PAM stays armed for the whole lock, so gating on
+            // `authenticating` here would keep the panel lit until unlock.
+            if (root.lockRequested && root.enteredPassword.length === 0 && !root.authenticatingPassword && !root.faceAuthenticating && root.facePhase !== "wake_delay")
+                root.runBlank();
+        }
+    }
+
+    Timer {
+        id: sessionLockStabilizeTimer
+        interval: 500
+        repeat: false
+        onTriggered: root.requestSessionLock()
+    }
+
+    Timer {
+        id: pendingSessionLockTimer
+        interval: 100
+        repeat: true
+        onTriggered: root.requestSessionLock()
+    }
+
+    Timer {
+        id: strandedLockRetryTimer
+        interval: 500
+        repeat: true
+        // Covers the compositor settling; screens coming back re-arm it.
+        readonly property int budget: 20
+        property int remaining: 20
+        running: !root.strandedLockResolved && remaining > 0
+
+        function rearm() {
+            if (!root.strandedLockResolved)
+                remaining = budget;
+        }
+
+        onTriggered: {
+            remaining -= 1;
+            root.checkStrandedLock();
+        }
+    }
+
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            root.requestSessionLock();
+
+            // A monitor still coming up has no workspace, so cannot answer yet.
+            strandedLockRetryTimer.rearm();
+            root.checkStrandedLock();
+        }
+    }
+
+    onAuthenticatingPasswordChanged: {
+        if (!lockRequested)
+            return;
+        if (authenticatingPassword)
+            idleBlankTimer.stop();
+        else
+            armBlankTimer();
+    }
+
+    FileView {
+        path: "/etc/pam.d/omarchy-lock-password"
+        watchChanges: true
+        printErrors: false
+        onLoaded: root.passwordPamConfigured = true
+        onLoadFailed: root.passwordPamConfigured = false
+        onFileChanged: reload()
+    }
+
+    // No lock before PAM is known good. An answer from before then may be stale --
+    // the failsafe can be cleared from a TTY -- so re-ask rather than act on it.
+    onPasswordPamConfiguredChanged: {
+        if (!passwordPamConfigured)
+            return;
+        strandedLock = false;
+        strandedLockResolved = false;
+        strandedLockRetryTimer.rearm();
+        checkStrandedLock();
+    }
+
+    Component.onCompleted: {
+        refreshBackground();
+        refreshFingerprintStatus();
+        refreshFaceStatus();
+        checkStrandedLock();
+    }
+
+    IpcHandler {
+        target: "lock"
+
+        function lock(): string {
+            if (!root.passwordPamConfigured)
+                return "missing-pam";
+            if (!root.locked && !root.beginLock())
+                return "failed";
+            return "ok";
+        }
+
+        function isLocked(): string {
+            return root.locked ? "true" : "false";
+        }
+
+        function status(): string {
+            return JSON.stringify({
+                locked: root.locked,
+                requested: root.lockRequested,
+                pending: root.pendingSessionLock,
+                sessionLocked: sessionLock.locked,
+                secure: sessionLock.secure,
+                realScreens: root.realScreenCount(),
+                passwordPam: root.passwordPamConfigured,
+                fingerprint: root.fingerprintConfigured,
+                face: root.faceConfigured,
+                unlockMode: root.unlockMode,
+                faceAuthenticating: root.faceAuthenticating,
+                facePhase: root.facePhase,
+                displayBlanked: root.displayBlanked,
+                blankPending: root.activityState.blankPending,
+                blankTimerRunning: idleBlankTimer.running,
+                editingPassword: root.enteredPassword.length > 0,
+                authenticating: root.authenticating,
+                lastEvent: root.lastEvent,
+                lastEventAt: root.lastEventAt
+            });
+        }
+
+        function preview(): string {
+            root.refreshBackground();
+            root.refreshFingerprintStatus();
+            root.refreshFaceStatus();
+            root.previewVisible = true;
+            return "ok";
+        }
+
+        function hidePreview(): string {
+            root.previewVisible = false;
+            return "ok";
+        }
+    }
+}

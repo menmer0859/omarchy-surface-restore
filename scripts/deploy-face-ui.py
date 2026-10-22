@@ -1,0 +1,1 @@
+../modules/face-auth/scripts/deploy-face-ui.py

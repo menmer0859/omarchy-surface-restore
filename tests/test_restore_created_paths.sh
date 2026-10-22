@@ -21,14 +21,18 @@ chmod +x "$temp/bin/sudo" "$temp/bin/systemctl"
 
 created_dir="$temp/etc/polkit-agent-helper@.service.d"
 created_file="$created_dir/60-omarchy-surface-face.conf"
-mkdir -p "$created_dir"
+plugin_dir="$temp/home/.config/omarchy/plugins/surface.lock"
+policy_file="$plugin_dir/FaceAttemptPolicy.js"
+mkdir -p "$created_dir" "$plugin_dir"
 printf '[Service]\n' > "$created_file"
-printf '%s\n%s\n' "$created_dir" "$created_file" > "$temp/backups/20261005-000000/.created_paths"
+printf 'module.exports = {};\n' > "$policy_file"
+printf '%s\n%s\n%s\n' "$created_dir" "$created_file" "$policy_file" > "$temp/backups/20261005-000000/.created_paths"
 
 printf '1\ny\n' | PATH="$temp/bin:$PATH" SURFACE_SETUP_BACKUP_ROOT="$temp/backups" \
   bash "$repo_root/scripts/restore.sh" >/dev/null
 
 [[ ! -e "$created_file" ]]
 [[ ! -e "$created_dir" ]]
+[[ ! -e "$policy_file" ]]
 
 echo 'restore created-path tests passed'

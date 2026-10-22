@@ -1,0 +1,85 @@
+From: Omarchy Surface Restore
+Subject: [PATCH] polkit: safely restart an input-waiting authentication conversation
+
+Preserve the authorization request and selected identity, and detach old Session
+callbacks before cancellation so synchronous completion cannot retry or finish
+the protected request. Reuse this path when changing administrator identity.
+
+diff --git a/src/services/polkit/flow.hpp b/src/services/polkit/flow.hpp
+--- a/src/services/polkit/flow.hpp
++++ b/src/services/polkit/flow.hpp
+@@ -96,6 +96,11 @@
+ 	/// Cancel the ongoing authentication request from the user side.
+ 	Q_INVOKABLE void cancelAuthenticationRequest();
+ 
++	/// Restart an input-waiting conversation for the same identity and request.
++	/// Does not submit a response or cancel the protected authorization request.
++	/// Returns false while busy or after the request has completed/cancelled.
++	Q_INVOKABLE bool restartAuthentication();
++
+ 	[[nodiscard]] const QString& message() const { return this->mRequest->message; };
+ 	[[nodiscard]] const QString& iconName() const { return this->mRequest->iconName; };
+ 	[[nodiscard]] const QString& actionId() const { return this->mRequest->actionId; };
+@@ -158,6 +163,7 @@
+ private:
+ 	/// Start a session for the currently selected identity and the current request.
+ 	void setupSession();
++	void replaceSession();
+ 
+ 	Session* currentSession = nullptr;
+ 	AuthRequest* mRequest = nullptr;
+diff --git a/src/services/polkit/flow.cpp b/src/services/polkit/flow.cpp
+--- a/src/services/polkit/flow.cpp
++++ b/src/services/polkit/flow.cpp
+@@ -44,9 +44,10 @@
+ 		qmlWarning(this) << "Cannot set selected identity to null.";
+ 		return;
+ 	}
++	if (!this->mIdentities.contains(identity) || this->bIsCompleted.value()
++	    || this->bIsCancelled.value()) return;
+ 	this->bSelectedIdentity = identity;
+-	this->currentSession->cancel();
+-	this->setupSession();
++	this->replaceSession();
+ }
+ 
+ void AuthFlow::cancelFromAgent() {
+@@ -93,6 +94,38 @@
+ 	Qt::endPropertyUpdateGroup();
+ 
+ 	this->mRequest->cancel("Authentication request cancelled by user.");
++}
++
++bool AuthFlow::restartAuthentication() {
++	if (!this->currentSession || !this->bIsResponseRequired.value()
++	    || this->bIsCompleted.value() || this->bIsCancelled.value()) return false;
++
++	this->replaceSession();
++	return true;
++}
++
++void AuthFlow::replaceSession() {
++	// Cancelling libpolkit can synchronously emit completed(false). Detach every
++	// old callback first so it cannot retry, overwrite state, or finish the
++	// authorization request while a replacement conversation is being created.
++	auto* oldSession = std::exchange(this->currentSession, nullptr);
++	if (oldSession) {
++		QObject::disconnect(oldSession, nullptr, this, nullptr);
++		oldSession->cancel();
++		delete oldSession;
++	}
++
++	Qt::beginPropertyUpdateGroup();
++	this->bIsResponseRequired = false;
++	this->bInputPrompt = QString();
++	this->bResponseVisible = false;
++	this->bSupplementaryMessage = QString();
++	this->bSupplementaryIsError = false;
++	Qt::endPropertyUpdateGroup();
++
++	// setupSession retains the selected Identity and the original AuthRequest
++	// (including its cookie). The new PAM conversation decides its first prompt.
++	this->setupSession();
+ }
+ 
+ void AuthFlow::setupSession() {
