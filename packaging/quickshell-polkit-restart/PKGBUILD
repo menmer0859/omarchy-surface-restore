@@ -1,0 +1,64 @@
+# Downstream Arch package pinned to the installed Omarchy source revision.
+# Adds upstream PR #875 session lookup and a safe Polkit conversation restart.
+# Keep package metadata and dependencies aligned with Arch's quickshell PKGBUILD.
+pkgname=quickshell
+pkgver=0.3.2.r7.g2b4501a
+pkgrel=2
+pkgdesc='Flexible toolkit for making desktop shells with QtQuick'
+arch=(x86_64 aarch64)
+url="https://github.com/quickshell-mirror/quickshell"
+license=(LGPL-3.0-only)
+depends=(cpptrace libcpptrace.so
+         glibc # libc.so libm.so
+         hicolor-icon-theme
+         jemalloc libjemalloc.so
+         libdrm # libdrm.so
+         libgcc libgcc_s.so
+         libglvnd libEGL.so libOpenGL.so
+         libpipewire libpipewire-0.3.so
+         libstdc++ libstdc++.so
+         libxcb # libxcb.so
+         mesa # libgbm.so
+         pam libpam.so
+         polkit
+         qt6-base # libQt6Core.so libQt6DBus.so libQt6Gui.so libQt6Network.so libQt6Widgets.so
+         qt6-declarative # libQt6Qml.so libQt6Quick.so
+         qt6-svg
+         qt6-wayland # libQt6WaylandClient.so
+         wayland libwayland-client.so)
+makedepends=(cli11 cmake ninja qt6-shadertools spirv-tools vulkan-headers wayland-protocols)
+_commit=2b4501a282689792b62e94f3fb30d8f512324fe6
+_archive="$pkgname-$_commit"
+source=("$_archive.tar.gz::$url/archive/$_commit.tar.gz"
+        quickshell-session-xdg-id.patch
+        quickshell-polkit-restart.patch)
+sha256sums=('e09495c73f8bfbb8637a28e6d73bf84063631b49bb3cb6d3c9702c80dfa78f31'
+            'e2e7d7094d9418c88d62c1f05f8c243aa43d04bfc6dbe59b93202a58a4246195'
+            '73585b55021fc891f36f4cc20d566b2fe08dd9d9da6d539c7beeeb1f78dcbcac')
+
+prepare() {
+  cd "$_archive"
+  patch -Np1 -i "$srcdir/quickshell-session-xdg-id.patch"
+  patch -Np1 -i "$srcdir/quickshell-polkit-restart.patch"
+}
+
+build() {
+  cd "$_archive"
+  local cmake_options=(
+    -D CMAKE_BUILD_TYPE=Release
+    -D GIT_REVISION="$_commit"
+    -D DISTRIBUTOR='Arch Linux (Omarchy Surface Restore)'
+    -D DISTRIBUTOR_DEBUGINFO_AVAILABLE=Yes
+    -D CRASH_REPORTER=Off
+    -D CMAKE_INSTALL_PREFIX=/usr
+    -D INSTALL_QML_PREFIX=lib/qt6/qml
+  )
+  cmake -G Ninja -B build -W no-dev "${cmake_options[@]}"
+  cmake --build build
+}
+
+package() {
+  cd "$_archive"
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE
+}

@@ -11,6 +11,7 @@ ColumnLayout {
     property string avatarPath: ""
     property string phase: "locked_idle"
     property bool passwordMode: false
+    property bool faceReturnMode: false
     property bool passwordBusy: false
     property bool passwordError: false
     property bool responseVisible: false
@@ -90,6 +91,27 @@ ColumnLayout {
         opacity: 0.8
         font.pixelSize: 15
     }
+    RowLayout {
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: 6
+        spacing: 12
+        Action {
+            objectName: "faceAction"
+            visible: root.faceAvailable && !root.scanning && !root.fingerprintMode
+            label: strings.t(root.faceReturnMode ? "action.returnFace" : root.phase === "failed" || root.timedOut ? "action.retry" : "action.face")
+            iconName: "face"
+            enabled: !root.passwordBusy
+            primary: !root.passwordMode
+            onClicked: root.faceRequested()
+        }
+        Action {
+            objectName: "passwordAction"
+            visible: !root.passwordMode && root.passwordSwitchAvailable
+            label: strings.t("action.password")
+            iconName: "password"
+            onClicked: root.passwordRequested()
+        }
+    }
     PasswordField {
         id: password
         visible: root.passwordMode
@@ -112,27 +134,6 @@ ColumnLayout {
         primary: true
         enabled: root.enabled && !root.passwordBusy && password.text.length > 0
         onClicked: root.submitted(password.text)
-    }
-    RowLayout {
-        Layout.alignment: Qt.AlignHCenter
-        Layout.topMargin: 6
-        spacing: 12
-        Action {
-            objectName: "faceAction"
-            visible: root.faceAvailable && !root.scanning && !root.fingerprintMode
-            label: strings.t(root.phase === "failed" || root.timedOut ? "action.retry" : "action.face")
-            iconName: "face"
-            enabled: !root.passwordBusy
-            primary: !root.passwordMode
-            onClicked: root.faceRequested()
-        }
-        Action {
-            objectName: "passwordAction"
-            visible: !root.passwordMode && root.passwordSwitchAvailable
-            label: strings.t("action.password")
-            iconName: "password"
-            onClicked: root.passwordRequested()
-        }
     }
     Action {
         visible: root.canChangeIdentity

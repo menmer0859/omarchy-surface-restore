@@ -5,7 +5,7 @@
   "lock.settlingHint": "请看向笔记本屏幕上方的相机。",
   "face.scanning": "正在识别你…",
   "face.hint": "请看向笔记本屏幕顶部的相机。",
-  "face.externalHint": "此屏幕未配置相机，请看向笔记本屏幕。",
+  "face.externalHint": "请看向笔记本屏幕上方的相机。",
   "face.failed": "未能识别",
   "face.failedHint": "可以重试，或使用密码。",
   "face.timeout": "识别超时",
@@ -43,7 +43,11 @@
   "admin.response": "认证响应",
   "identity.label": "账户：%1",
   "camera.label": "笔记本屏幕上方的相机",
+  "terminal.hint": "请看向笔记本屏幕上方的相机。",
+  "terminal.camera": "相机",
+  "terminal.laptop": "笔记本",
   "terminal.prompt": "使用人脸识别？[y/N] ",
   "feedback.cancelled": "已取消",
-  "feedback.success": "验证通过"
+  "feedback.success": "验证通过",
+  "action.returnFace": "返回人脸验证"
 }

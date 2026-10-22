@@ -52,7 +52,7 @@ import json
 import sys
 from pathlib import Path
 path = Path(sys.argv[1]); data = json.loads(path.read_text())
-data['version'] = '2.0.0'
+data['version'] = '2.1.0'
 data['omarchy']['surfaceFaceAuth'] = True
 path.write_text(json.dumps(data, indent=2) + '\n')
 PY

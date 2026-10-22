@@ -10,6 +10,7 @@ FocusScope {
     property bool responseVisible: false
     property bool revealed: false
     property bool capsOn: false
+    onTextChanged: if (text.length === 0) revealed = false
     function applyKeyboardState(raw) {
         var data;
         try {
@@ -52,6 +53,11 @@ FocusScope {
         input.text = "";
         revealed = false;
     }
+    function toggleReveal() {
+        revealed = !revealed;
+        root.editing();
+        input.forceActiveFocus();
+    }
     AuthStrings {
         id: strings
     }
@@ -74,9 +80,10 @@ FocusScope {
             }
             color: Commons.Color.foreground
             font.family: Commons.Style.font.family
-            font.pixelSize: 20
+            font.pixelSize: root.responseVisible || root.revealed ? 20 : 18
+            font.letterSpacing: root.responseVisible || root.revealed ? 0 : 2
             echoMode: root.responseVisible || root.revealed ? TextInput.Normal : TextInput.Password
-            passwordCharacter: "●"
+            passwordCharacter: "·"
             passwordMaskDelay: 0
             clip: true
             readOnly: root.busy
@@ -86,6 +93,7 @@ FocusScope {
             onAccepted: if (text.length > 0 && !root.busy)
                 root.submitted(text)
             Keys.onPressed: function (event) {
+                root.editing();
                 if (event.key === Qt.Key_CapsLock)
                     root.capsOn = !root.capsOn;
                 if (event.key === Qt.Key_Escape)
@@ -109,7 +117,7 @@ FocusScope {
             visible: !root.responseVisible
             Accessible.role: Accessible.Button
             Accessible.name: root.revealed ? strings.t("action.hidePassword") : strings.t("action.showPassword")
-            Accessible.onPressAction: root.revealed = !root.revealed
+            Accessible.onPressAction: root.toggleReveal()
             Icon {
                 anchors.centerIn: parent
                 name: root.revealed ? "eyeOff" : "eye"
@@ -125,12 +133,11 @@ FocusScope {
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
-                    root.revealed = !root.revealed;
-                    input.forceActiveFocus();
+                    root.toggleReveal();
                 }
             }
-            Keys.onSpacePressed: root.revealed = !root.revealed
-            Keys.onReturnPressed: root.revealed = !root.revealed
+            Keys.onSpacePressed: root.toggleReveal()
+            Keys.onReturnPressed: root.toggleReveal()
         }
     }
     Label {

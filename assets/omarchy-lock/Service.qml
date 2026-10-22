@@ -1,6 +1,7 @@
 import QtQuick
 import "FaceAttemptPolicy.js" as FaceAttemptPolicy
 import "DisplayWakePolicy.js" as DisplayWakePolicy
+import "LockActivityPolicy.js" as LockActivityPolicy
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pam
@@ -33,6 +34,7 @@ Item {
     property int facePamAttemptId: 0
     property double faceAttemptStartedAt: 0
     property bool displayBlanked: false
+    property var activityState: LockActivityPolicy.createState()
     property var monitorWakeState: DisplayWakePolicy.createState()
     property bool suspendSignalPending: false
     property string unlockMode: "password"
@@ -206,13 +208,14 @@ Item {
             return;
         if (unlockMode === mode && mode !== "face")
             return;
+        var returningFromPassword = unlockMode === "password";
         unlockMode = mode;
         enteredPassword = "";
         passwordFailed = false;
         if (mode === "password") {
             applyFaceEvent({ type: "PASSWORD_SELECTED" });
         } else {
-            applyFaceEvent({ type: "FACE_SELECTED" });
+            applyFaceEvent({ type: returningFromPassword ? "FACE_RETURNED" : "FACE_SELECTED" });
         }
         runWake();
     }
@@ -258,44 +261,83 @@ Item {
     }
 
     function armBlankTimer() {
+        var delay = LockActivityPolicy.idleDelay({
+            passwordMode: unlockMode === "password",
+            passwordLength: enteredPassword.length,
+            busy: authenticatingPassword || faceAuthenticating || facePhase === "wake_delay",
+            blanked: !lockRequested || displayBlanked
+        });
+        idleBlankTimer.stop();
+        if (delay === 0) return;
+        idleBlankTimer.interval = delay;
         idleBlankTimer.armedAt = Date.now();
         idleBlankTimer.restart();
+    }
+
+    onEnteredPasswordChanged: armBlankTimer()
+
+    function clearBlankInput() {
+        enteredPassword = "";
+        pendingPassword = "";
+        passwordFailed = false;
+        authenticatingPassword = false;
+        if (passwordPam.active) passwordPam.abort();
+        unlockMode = faceConfigured ? "face" : "password";
+    }
+
+    function applyActivityEvent(event) {
+        var result = LockActivityPolicy.transition(activityState, event);
+        activityState = result.state;
+        for (var i = 0; i < result.effects.length; i++) {
+            if (result.effects[i] === "WAKE") {
+                logEvent("display-command=wake");
+                wakeProcess.running = true;
+            }
+            else if (result.effects[i] === "BLANK") {
+                logEvent("display-command=blank");
+                blankProcess.running = true;
+            }
+        }
     }
 
     function invalidateMonitorObservations() {
         monitorWakeState = DisplayWakePolicy.invalidate(monitorWakeState);
     }
 
-    function runWake() {
-        if (displayBlanked) invalidateMonitorObservations();
-        displayBlanked = false;
-        if (!wakeProcess.running)
-            wakeProcess.running = true;
-        if (lockRequested)
+    function runWake(deliberate, force) {
+        applyActivityEvent({ type: "WAKE", deliberate: deliberate !== false, force: force === true || !lockRequested, now: Date.now() });
+        if (!activityState.blanked) {
+            if (displayBlanked) invalidateMonitorObservations();
+            displayBlanked = false;
+        }
+        if (lockRequested && !displayBlanked)
             armBlankTimer();
     }
 
-    function handleWakeRequested() {
+    function handleWakeRequested(deliberate) {
         if (!lockRequested)
             return;
         var wasBlank = displayBlanked;
         var confirmedOff = monitorWakeState.offObserved;
-        runWake();
-        if (wasBlank) applyFaceEvent({ type: confirmedOff ? "SCREEN_WOKE" : "DISPLAY_ACTIVE" });
+        runWake(deliberate);
+        if (wasBlank && !displayBlanked) applyFaceEvent({ type: confirmedOff ? "SCREEN_WOKE" : "DISPLAY_ACTIVE" });
     }
 
     function runBlank() {
-        if (!blankProcess.running) {
+        if (lockRequested) {
+            idleBlankTimer.stop();
             invalidateMonitorObservations();
+            clearBlankInput();
             applyFaceEvent({ type: "DISPLAY_BLANKED" });
             displayBlanked = true;
-            blankProcess.running = true;
+            idleBlankTimer.stop();
+            applyActivityEvent({ type: "BLANK", now: Date.now() });
         }
     }
 
     function submitPassword(value) {
         var password = String(value || "");
-        if (!lockRequested || authenticatingPassword || password.length === 0)
+        if (!lockRequested || displayBlanked || passwordPam.active || authenticatingPassword || password.length === 0)
             return;
         applyFaceEvent({ type: "PASSWORD_SELECTED" });
         runWake();
@@ -318,7 +360,7 @@ Item {
     }
 
     function handlePasswordFailure() {
-        if (!lockRequested)
+        if (!lockRequested || displayBlanked)
             return;
         authenticatingPassword = false;
         enteredPassword = "";
@@ -477,7 +519,7 @@ Item {
                     root.submitPassword(password);
                 }
                 onClearFailureRequested: root.passwordFailed = false
-                onWakeRequested: root.handleWakeRequested()
+                onWakeRequested: function(deliberate) { root.handleWakeRequested(deliberate); }
                 onFaceIntentRequested: root.applyFaceEvent({ type: "INTENT" })
                 onBlankRequested: root.runBlank()
                 onFaceRetryRequested: function () {
@@ -539,10 +581,11 @@ Item {
         onPamMessage: root.respondToPasswordPrompt()
 
         onCompleted: function (result) {
+            var expected = root.authenticatingPassword;
             root.authenticatingPassword = false;
             root.pendingPassword = "";
 
-            if (!root.lockRequested)
+            if (!expected || !root.lockRequested || root.displayBlanked)
                 return;
             if (result === PamResult.Success)
                 root.finishUnlock();
@@ -551,7 +594,7 @@ Item {
         }
 
         onError: function (error) {
-            root.handlePasswordFailure();
+            if (root.authenticatingPassword) root.handlePasswordFailure();
         }
     }
 
@@ -621,6 +664,8 @@ Item {
                     root.suspendSignalPending = false;
                     root.invalidateMonitorObservations();
                     root.displayBlanked = true;
+                    root.applyActivityEvent({ type: "OBSERVED_BLANK" });
+                    root.clearBlankInput();
                     root.applyFaceEvent({ type: "SUSPEND" });
                 } else if (root.suspendSignalPending && line.indexOf("boolean false") >= 0) {
                     root.suspendSignalPending = false;
@@ -707,11 +752,20 @@ Item {
     Process {
         id: wakeProcess
         command: ["bash", "-c", "omarchy-system-wake"]
+        onExited: root.applyActivityEvent({ type: "WAKE_FINISHED", now: Date.now() })
     }
 
     Process {
         id: blankProcess
         command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+        onExited: {
+            root.applyActivityEvent({ type: "BLANK_FINISHED", now: Date.now() });
+            if (!root.activityState.blanked) {
+                root.displayBlanked = false;
+                root.applyFaceEvent({ type: "DISPLAY_ACTIVE" });
+                root.armBlankTimer();
+            }
+        }
     }
 
     function applyMonitorState(raw, sampleLockId, sampleEpoch) {
@@ -723,6 +777,8 @@ Item {
         for (var i = 0; i < result.effects.length; i++) {
             if (result.effects[i] === "DISPLAY_BLANKED") {
                 displayBlanked = true;
+                applyActivityEvent({ type: "OBSERVED_BLANK" });
+                clearBlankInput();
                 applyFaceEvent({ type: "DISPLAY_BLANKED" });
             } else if (result.effects[i] === "SCREEN_WOKE") {
                 runWake();
@@ -746,7 +802,7 @@ Item {
         repeat: true
         running: root.lockRequested
         onTriggered: {
-            if (!monitorState.running && !blankProcess.running) {
+            if (!monitorState.running && !blankProcess.running && !root.activityState.blankPending) {
                 monitorState.sampleLockId = root.facePolicyState.lockId;
                 monitorState.sampleEpoch = root.monitorWakeState.epoch;
                 monitorState.running = true;
@@ -760,7 +816,7 @@ Item {
 
     Timer {
         id: idleBlankTimer
-        interval: 5000
+        interval: 30000
         repeat: false
         property double armedAt: 0
         onTriggered: {
@@ -774,7 +830,7 @@ Item {
             // Only a password check in flight should hold the display up. The
             // fingerprint PAM stays armed for the whole lock, so gating on
             // `authenticating` here would keep the panel lit until unlock.
-            if (root.lockRequested && !root.authenticatingPassword && !root.faceAuthenticating && root.facePhase !== "wake_delay")
+            if (root.lockRequested && root.enteredPassword.length === 0 && !root.authenticatingPassword && !root.faceAuthenticating && root.facePhase !== "wake_delay")
                 root.runBlank();
         }
     }
@@ -888,6 +944,11 @@ Item {
                 face: root.faceConfigured,
                 unlockMode: root.unlockMode,
                 faceAuthenticating: root.faceAuthenticating,
+                facePhase: root.facePhase,
+                displayBlanked: root.displayBlanked,
+                blankPending: root.activityState.blankPending,
+                blankTimerRunning: idleBlankTimer.running,
+                editingPassword: root.enteredPassword.length > 0,
                 authenticating: root.authenticating,
                 lastEvent: root.lastEvent,
                 lastEventAt: root.lastEventAt

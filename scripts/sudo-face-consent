@@ -43,7 +43,7 @@ fi
 case "$answer" in
   y|Y)
     if [[ -f "$locale_helper" ]]; then
-      /usr/bin/python3 -I "$locale_helper" --user "${PAM_USER:-${SUDO_USER:-}}" --key face.hint >&3 2>/dev/null
+      /usr/bin/python3 -I "$locale_helper" --user "${PAM_USER:-${SUDO_USER:-}}" --guidance >&3 2>/dev/null
       printf '\n' >&3
     fi
     exit 0 ;;

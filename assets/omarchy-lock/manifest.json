@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "surface.lock",
   "name": "Surface Face Unlock",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "Surface Omarchy community",
   "description": "Omarchy session lock with one-shot, user-initiated Howdy authentication and password fallback.",
   "omarchy": {

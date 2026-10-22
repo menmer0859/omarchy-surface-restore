@@ -158,7 +158,7 @@ console.log('Lock face policy tests passed.');
  assert.ok(r.effects.includes('STOP_WAKE_DELAY'));
  assert.deepEqual(send(r.state,'WAKE_DELAY_ELAPSED',stale).effects, []);
  r=send(r.state,'DISPLAY_BLANKED');
- assert.deepEqual(send(r.state,'SCREEN_WOKE').effects, [], 'password choice wins over auto wake');
+ assert.deepEqual(send(r.state,'SCREEN_WOKE').effects, ['START_WAKE_DELAY'], 'actual blank starts fresh wake flow after password editing');
 }
 {
  let r = send(startSecureLock(createState()),'SUSPEND');
@@ -181,3 +181,11 @@ assert.equal(policy.isIntentKey(65,1,false,keys),true,'ordinary shifted characte
 assert.equal(policy.isIntentKey(65,2,false,keys),false,'Ctrl shortcut is not face intent');
 assert.equal(policy.isIntentKey(65,0,true,keys),false,'repeat is not fresh intent');
 console.log('Modifier-only face intent regression passed.');
+{
+ let r = send(startSecureLock(createState()),'PASSWORD_SELECTED');
+ r=send(r.state,'FACE_RETURNED');
+ assert.equal(r.state.phase,'locked_idle','return from password opens a quiet face picker');
+ assert.deepEqual(r.effects,[],'return itself never consents to camera');
+ r=send(r.state,'FACE_SELECTED');
+ assert.deepEqual(r.effects,['START_FACE'],'explicit Use face after return starts one attempt');
+}

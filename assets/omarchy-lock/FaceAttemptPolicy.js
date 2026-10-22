@@ -85,6 +85,13 @@ function transition(state, event) {
         effects.push("START_FACE");
         break;
 
+    case "FACE_RETURNED":
+        if (state.phase === "password" && state.secure && !state.blank && !state.suspended && state.faceAvailable && matchesLock(state, event)) {
+            next.phase = "locked_idle";
+            next.wakeId += 1;
+        }
+        break;
+
     case "FACE_RESULT":
         if (state.phase !== "scanning" || !matchesAttempt(state, event))
             break;
@@ -135,7 +142,9 @@ function transition(state, event) {
         next.wakeId += 1;
         next.blank = true;
         next.suspended = event.type === "SUSPEND" || state.suspended;
-        if (state.phase === "scanning" || state.phase === "wake_delay") next.phase = "locked_idle";
+        // A real blank/suspend ends the previous editing session. A later wake
+        // is fresh intent, while choosing password on a lit screen still wins.
+        next.phase = "locked_idle";
         break;
 
     case "DISPLAY_ACTIVE":

@@ -5,7 +5,7 @@
   "lock.settlingHint": "Look toward the camera above your laptop screen.",
   "face.scanning": "Looking for you…",
   "face.hint": "Look toward the camera at the top of your laptop screen.",
-  "face.externalHint": "This display has no configured camera. Look toward your laptop screen.",
+  "face.externalHint": "Look toward the camera above your laptop screen.",
   "face.failed": "Not recognized",
   "face.failedHint": "Try again or use your password.",
   "face.timeout": "Recognition timed out",
@@ -43,7 +43,11 @@
   "admin.response": "Authentication response",
   "identity.label": "Account: %1",
   "camera.label": "Camera above the laptop screen",
+  "terminal.hint": "Look toward the camera above your laptop screen.",
+  "terminal.camera": "Camera",
+  "terminal.laptop": "Laptop",
   "terminal.prompt": "Use face authentication? [y/N] ",
   "feedback.cancelled": "Cancelled",
-  "feedback.success": "Verified"
+  "feedback.success": "Verified",
+  "action.returnFace": "Return to face"
 }

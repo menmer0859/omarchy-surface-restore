@@ -38,7 +38,7 @@ exec "$@"
             result = subprocess.run(['bash',str(ROOT/'scripts/install-plugin-ui.sh')],input='y\n',env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             data=json.loads((plugin/'manifest.json').read_text()); self.assertEqual(data['id'],'test.lock')
-            self.assertEqual(data['version'],'2.0.0')
+            self.assertEqual(data['version'],'2.1.0')
             self.assertIn('使用人脸',(plugin/'i18n/zh-CN.json').read_text())
             result = subprocess.run(['bash',str(ROOT/'scripts/restore.sh')],input='1\ny\n',env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)

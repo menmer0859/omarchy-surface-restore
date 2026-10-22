@@ -10,7 +10,7 @@ import tempfile
 def resources(repo: Path, kind: str) -> dict:
     if kind not in ('lock', 'polkit'):
         raise ValueError('unknown plugin kind')
-    names = ('Service.qml', 'LockView.qml', 'FaceAttemptPolicy.js', 'DisplayWakePolicy.js', 'qmldir') if kind == 'lock' else ('PolkitAgent.qml', 'PolkitModel.js', 'AuthorizationView.qml', 'qmldir')
+    names = ('Service.qml', 'LockView.qml', 'FaceAttemptPolicy.js', 'DisplayWakePolicy.js', 'LockActivityPolicy.js', 'qmldir') if kind == 'lock' else ('PolkitAgent.qml', 'PolkitModel.js', 'AuthorizationView.qml', 'qmldir')
     result = {name: repo/'assets'/('omarchy-' + kind)/name for name in names}
     for source in sorted((repo/'assets/face-ui').iterdir()):
         if source.is_file() and (source.suffix == '.qml' or source.name == 'qmldir'):

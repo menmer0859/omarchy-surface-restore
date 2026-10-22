@@ -38,6 +38,8 @@ Item {
   // Set only after the user explicitly chooses face authentication.
   property bool faceCheckPending: false
   property bool faceFallbackActive: false
+  property var faceConsentFlow: null
+  property var faceConsentIdentity: null
   property bool errorFlash: false
   // pam_fprintd appears in the polkit PAM stack (a sensor is enrolled).
   property bool fingerprintConfigured: false
@@ -47,7 +49,8 @@ Item {
   property int shakeOffset: 0
 
   readonly property bool dialogVisible: polkitAgent.isActive || closing
-  readonly property bool faceConsentMode: dialogVisible && responseRequired && PolkitModel.isFaceConsentPrompt(currentPrompt) && !faceFallbackActive
+  readonly property bool faceConsentMode: dialogVisible && responseRequired && PolkitModel.isFaceConsentPrompt(currentPrompt)
+  readonly property bool canReturnToFace: dialogVisible && !closing && PolkitModel.canReturnToFace(polkitAgent.flow, faceConsentFlow, faceConsentIdentity, submitted, faceCheckPending)
   readonly property var activeIdentity: polkitAgent.flow ? polkitAgent.flow.selectedIdentity : null
   readonly property var allowedIdentities: polkitAgent.flow ? polkitAgent.flow.identities : []
   // We show one method at a time. Fingerprint owns the dialog while PAM is
@@ -78,6 +81,8 @@ Item {
     authView.passwordText = ""
     faceFallbackActive = false
     faceCheckPending = false
+    faceConsentFlow = null
+    faceConsentIdentity = null
     flow.selectedIdentity = flow.identities[index]
     Qt.callLater(syncFromFlow)
     Qt.callLater(refocus)
@@ -102,6 +107,8 @@ Item {
     submitted = false
     faceCheckPending = false
     faceFallbackActive = false
+    faceConsentFlow = null
+    faceConsentIdentity = null
     authView.passwordText = ""
   }
 
@@ -116,6 +123,11 @@ Item {
     responseVisible = !!flow.responseVisible
     failed = !!flow.failed
 
+    if (responseRequired && PolkitModel.isFaceConsentPrompt(currentPrompt)) {
+      faceConsentFlow = flow
+      faceConsentIdentity = flow.selectedIdentity
+      faceFallbackActive = false
+    }
     if (responseRequired && !PolkitModel.isFaceConsentPrompt(currentPrompt)) {
       if (faceCheckPending) faceFallbackActive = true
       faceCheckPending = false
@@ -130,6 +142,8 @@ Item {
     submitted = false
     faceFallbackActive = false
     faceCheckPending = false
+    faceConsentFlow = null
+    faceConsentIdentity = null
     authView.passwordText = ""
     refreshLidState()
     syncFromFlow()
@@ -146,13 +160,29 @@ Item {
 
   function submitFaceConsent(useFace) {
     var flow = polkitAgent.flow
-    if (!flow || !flow.isResponseRequired || !PolkitModel.isFaceConsentPrompt(currentPrompt)) return
+    if (!flow || flow.isCompleted || flow.isCancelled || !flow.isResponseRequired || !PolkitModel.isFaceConsentPrompt(currentPrompt) || !PolkitModel.isFaceConsentPrompt(flow.inputPrompt)) return
     faceFallbackActive = false
     faceCheckPending = useFace
     submitted = true
     authView.passwordText = ""
     flow.submit(useFace ? "y" : "n")
     authView.forceActiveFocus()
+  }
+
+  function returnToFace() {
+    var flow = polkitAgent.flow
+    if (!canReturnToFace || !PolkitModel.canReturnToFace(flow, faceConsentFlow, faceConsentIdentity, submitted, faceCheckPending)) return
+    authView.passwordText = ""
+    faceFallbackActive = false
+    faceCheckPending = false
+    errorFlash = false
+    submitted = true
+    // Restart only the input-waiting conversation. The native method retains
+    // the original protected request and identity and sends no PAM response.
+    // A new consent prompt still requires a separate explicit face choice.
+    if (!flow.restartAuthentication()) submitted = false
+    syncFromFlow()
+    Qt.callLater(refocus)
   }
 
   function submitResponse() {
@@ -254,6 +284,14 @@ Item {
       Qt.callLater(root.refocus)
     }
 
+    function onSelectedIdentityChanged() {
+      root.faceConsentFlow = null
+      root.faceConsentIdentity = null
+      root.faceFallbackActive = false
+      root.faceCheckPending = false
+      authView.passwordText = ""
+    }
+
     function onInputPromptChanged() { root.syncFromFlow() }
     function onResponseVisibleChanged() { root.syncFromFlow() }
     function onSupplementaryMessageChanged() { root.syncFromFlow() }
@@ -302,6 +340,7 @@ Item {
         avatarPath: root.activeIdentity && !root.activeIdentity.isGroup && root.activeIdentity.name === (Quickshell.env("USER") || Quickshell.env("LOGNAME")) ? Quickshell.env("HOME") + "/.face" : ""
         message: root.currentMessage || strings.t("admin.message")
         consentMode: root.faceConsentMode
+        canReturnToFace: root.canReturnToFace
         scanning: root.faceCheckPending
         fingerprintMode: root.fingerprintMode
         passwordMode: root.responseRequired && !root.faceConsentMode && !root.faceCheckPending
@@ -314,6 +353,7 @@ Item {
         reducedMotion: root.reducedMotion
         canChangeIdentity: root.allowedIdentities.length > 1
         onFaceConsent: function(useFace) { if (root.faceConsentMode) root.submitFaceConsent(useFace) }
+        onReturnToFace: root.returnToFace()
         onSubmitted: root.submitResponse()
         onCancelled: root.cancelRequest()
         onChangeIdentity: root.cycleIdentity()

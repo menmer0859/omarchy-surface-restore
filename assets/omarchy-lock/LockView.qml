@@ -31,7 +31,7 @@ Item {
     signal submitPassword(string password)
     signal passwordTextEdited(string password)
     signal clearFailureRequested
-    signal wakeRequested
+    signal wakeRequested(bool deliberate)
     signal faceIntentRequested
     signal faceRetryRequested
     signal unlockModeRequested(string mode)
@@ -47,7 +47,7 @@ Item {
     }
     function requestFaceIntent() {
         if (inputEnabled) {
-            wakeRequested();
+            wakeRequested(true);
             faceIntentRequested();
         }
     }
@@ -70,12 +70,16 @@ Item {
     LayoutMirroring.enabled: Commons.I18n.rightToLeft
     LayoutMirroring.childrenInherit: true
     Keys.onPressed: function (event) {
+        if (inputEnabled && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)) {
+            root.wakeRequested(true);
+            return;
+        }
         if (!inputEnabled || !FaceAttemptPolicy.isIntentKey(event.key, event.modifiers, event.isAutoRepeat, Qt))
             return;
         if (!passwordMode)
             root.requestFaceIntent();
         else
-            root.wakeRequested();
+            root.wakeRequested(true);
         event.accepted = true;
     }
     SystemClock {
@@ -84,7 +88,7 @@ Item {
     }
     Column {
         id: clockGroup
-        visible: root.height >= 650
+        visible: root.height >= 650 && auth.implicitHeight + 306 <= root.height
         anchors.top: parent.top
         anchors.topMargin: 55
         anchors.horizontalCenter: parent.horizontalCenter
@@ -137,7 +141,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         onPressed: root.requestFaceIntent()
-        onPositionChanged: root.wakeRequested()
+        onPositionChanged: root.wakeRequested(false)
     }
     Row {
         anchors.top: parent.top
@@ -187,6 +191,7 @@ Item {
             phase: root.facePhase
             faceAvailable: root.faceConfigured
             passwordMode: root.passwordMode
+            faceReturnMode: root.passwordMode
             passwordBusy: root.authenticatingPassword
             passwordError: root.failureMessage !== ""
             externalDisplay: root.externalDisplay
@@ -200,7 +205,7 @@ Item {
             onPasswordTextChanged: if (passwordText !== root.passwordText)
                 root.passwordTextEdited(passwordText)
             onEditing: {
-                root.wakeRequested();
+                root.wakeRequested(true);
                 root.clearFailureRequested();
             }
         }

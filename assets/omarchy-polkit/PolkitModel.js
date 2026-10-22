@@ -27,6 +27,16 @@ function isFaceConsentPrompt(prompt) {
   return String(prompt || "").trim() === "Use face authentication? [y/N]"
 }
 
+// Only a runtime with the native safe-restart API can return to the picker.
+// Capability belongs to the request and selected identity whose PAM consent
+// prompt we actually observed; another request/administrator must earn its own.
+function canReturnToFace(flow, consentFlow, consentIdentity, submitted, scanning) {
+  return !!flow && flow === consentFlow && flow.selectedIdentity === consentIdentity
+    && typeof flow.restartAuthentication === "function"
+    && !flow.isCompleted && !flow.isCancelled && flow.isResponseRequired
+    && !submitted && !scanning && !isFaceConsentPrompt(flow.inputPrompt)
+}
+
 function identityLabel(identity) {
   if (!identity) return "Unknown administrator"
   var name = String(identity.name || "")
@@ -47,6 +57,7 @@ if (typeof module !== "undefined") {
     fingerprintConfiguredFromPamConfig: fingerprintConfiguredFromPamConfig,
     authorizationLabel: authorizationLabel,
     isFaceConsentPrompt: isFaceConsentPrompt,
+    canReturnToFace: canReturnToFace,
     identityLabel: identityLabel,
     nextIdentityIndex: nextIdentityIndex
   }

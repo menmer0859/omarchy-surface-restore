@@ -10,6 +10,8 @@ ShellRoot {
  property int step: 0
  property bool faceChosen: false
  property bool passwordChosen: false
+ property string lastMode: ""
+ property int wakeCalls: 0
  function findItem(item, name) { if (item.objectName === name) return item; for (var i = 0; i < item.children.length; i++) { var found = findItem(item.children[i], name); if (found) return found } return null }
  function check(condition, message) { if (!condition) { console.error("FAIL: " + message); Qt.exit(1); throw new Error(message) } }
  Window {
@@ -18,7 +20,7 @@ ShellRoot {
   Admin.AuthorizationView { id: admin; width: 480; height: 620; visible: false; userName: "eclipse"; consentMode: true }
  }
  Connections { target: admin; function onFaceConsent(value) { if (value) suite.faceChosen = true; else suite.passwordChosen = true } }
- Connections { target: lock; function onUnlockModeRequested(mode) { suite.check(mode === "password", "password signal"); suite.step++ } }
+ Connections { target: lock; function onWakeRequested(deliberate) { suite.wakeCalls++; } function onUnlockModeRequested(mode) { suite.lastMode = mode; if (suite.step === 2) { suite.check(mode === "password", "password signal"); suite.step++ } } }
  Timer {
   interval: 250; running: true; repeat: true
   onTriggered: {
@@ -66,6 +68,23 @@ ShellRoot {
      if (folder) window.contentItem.grabToImage(function(result) { result.saveToFile(folder + "/avatar-zh.png") })
      suite.step = 6;
     } else if (suite.step === 6) {
+     lock.unlockMode = "password"; lock.facePhase = "password"; suite.lastMode = ""; suite.step = 7;
+    } else if (suite.step === 7) {
+     var face = suite.findItem(lock, "faceAction");
+     suite.check(face.visible && face.enabled, "password screen has accessible face return action");
+     suite.check(face.mapToItem(lock, 0, face.height).y <= lock.height - 86, "face return must be inside viewport without scrolling at 1024x768");
+     suite.check(suite.lastMode === "", "password mode must not switch automatically");
+     face.clicked(); suite.check(suite.lastMode === "face", "return action requests face explicitly");
+     var input = suite.findItem(lock, "passwordInput");
+     var field = input.parent.parent;
+     field.text = "not-a-real-password"; field.revealed = true; suite.wakeCalls = 0; field.text = "";
+     suite.check(suite.wakeCalls === 0, "programmatic password clearing never wakes a blanked display");
+     suite.check(!field.revealed, "clearing an editing session also resets password reveal");
+     field.text = "example"; suite.step = 8;
+    } else if (suite.step === 8) {
+     var folder = Quickshell.env("SURFACE_TEST_SCREENSHOTS"); suite.step = 80;
+     if (folder) window.contentItem.grabToImage(function(result) { result.saveToFile(folder + "/password-return-en.png"); suite.step = 9; }); else suite.step = 9;
+    } else if (suite.step === 9) {
      console.log("SURFACE_QML_TESTS_PASS"); Qt.quit();
     }
    } catch (error) { console.error("FAIL: " + error); Qt.exit(1) }

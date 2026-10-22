@@ -158,7 +158,7 @@ omarchy = data.setdefault("omarchy", {})
 if omarchy.get("clonedFrom") != "omarchy.polkit":
     raise SystemExit("refusing to label a plugin that is not cloned from omarchy.polkit")
 omarchy["surfaceFaceAuth"] = True
-data["version"] = "2.0.0"
+data["version"] = "2.1.0"
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 omarchy-shell shell rescanPlugins >/dev/null

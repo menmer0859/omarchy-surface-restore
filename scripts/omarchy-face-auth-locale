@@ -30,7 +30,14 @@ def translate(language: str, key: str) -> str:
     # are allow-listed; no user-provided path or catalog is loaded by PAM.
     if language not in ('en', 'zh-CN'):
         language = 'en'
-    if key not in ('terminal.prompt', 'face.hint'):
+    defaults = {
+        'terminal.prompt': 'Use face authentication? [y/N] ',
+        'face.hint': 'Look toward the camera above your laptop screen.',
+        'terminal.hint': 'Look toward the camera above your laptop screen.',
+        'terminal.camera': 'Camera',
+        'terminal.laptop': 'Laptop',
+    }
+    if key not in defaults:
         raise ValueError('unsupported display key')
     directory = Path(__file__).absolute().parent / 'surface-face-i18n'
     try:
@@ -40,13 +47,36 @@ def translate(language: str, key: str) -> str:
             return text
     except (OSError, ValueError):
         pass
-    return 'Use face authentication? [y/N] ' if key == 'terminal.prompt' else 'Look toward the camera above your laptop screen.'
+    return defaults[key]
+
+
+def guidance(language: str, terminal_fd: int = 3) -> str:
+    """Static orientation only; terminal size comes from the actual PAM TTY."""
+    hint = translate(language, 'terminal.hint')
+    try:
+        columns = os.get_terminal_size(terminal_fd).columns
+    except OSError:
+        columns = 0
+    if columns < 48 or os.environ.get('TERM', '') in ('', 'dumb'):
+        return hint
+    return '\n'.join((
+        '             ' + translate(language, 'terminal.camera'),
+        '              |',
+        '    +--------[o]--------+',
+        '    |                   |',
+        '    |                   |',
+        '    +-------------------+',
+        '   /_____________________\\',
+        '          ' + translate(language, 'terminal.laptop'),
+        hint,
+    ))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--user', default='')
-    parser.add_argument('--key', choices=('terminal.prompt', 'face.hint'), default='terminal.prompt')
+    parser.add_argument('--key', choices=('terminal.prompt', 'face.hint', 'terminal.hint', 'terminal.camera', 'terminal.laptop'), default='terminal.prompt')
+    parser.add_argument('--guidance', action='store_true')
     args = parser.parse_args()
     try:
         account = pwd.getpwnam(args.user) if args.user else pwd.getpwuid(os.getuid())
@@ -54,7 +84,7 @@ def main():
         language = language_for_home(Path(account.pw_dir), locale)
     except KeyError:
         language = 'en'
-    print(translate(language, args.key), end='')
+    print(guidance(language) if args.guidance else translate(language, args.key), end='')
 
 
 if __name__ == '__main__':

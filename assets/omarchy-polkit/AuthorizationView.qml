@@ -9,6 +9,7 @@ FocusScope {
     property string avatarPath: ""
     property string message: ""
     property bool consentMode: false
+    property bool canReturnToFace: false
     property bool scanning: false
     property bool fingerprintMode: false
     property bool passwordMode: false
@@ -23,6 +24,7 @@ FocusScope {
     property alias passwordText: card.passwordText
     readonly property string faceLabel: card.faceLabel
     signal faceConsent(bool useFace)
+    signal returnToFace
     signal submitted
     signal cancelled
     signal changeIdentity
@@ -66,7 +68,8 @@ FocusScope {
         avatarPath: root.avatarPath
         message: root.message
         phase: root.scanning ? "scanning" : root.faceFailed ? "failed" : "locked_idle"
-        faceAvailable: root.consentMode && !root.scanning
+        faceAvailable: (root.consentMode || root.canReturnToFace) && !root.scanning
+        faceReturnMode: root.passwordMode && root.canReturnToFace
         passwordMode: root.passwordMode
         passwordBusy: root.busy
         passwordError: root.passwordError
@@ -76,7 +79,10 @@ FocusScope {
         canChangeIdentity: root.canChangeIdentity
         externalDisplay: root.externalDisplay
         reducedMotion: root.reducedMotion
-        onFaceRequested: root.faceConsent(true)
+        onFaceRequested: {
+            if (root.passwordMode && root.canReturnToFace) root.returnToFace()
+            else if (root.consentMode) root.faceConsent(true)
+        }
         onPasswordRequested: root.faceConsent(false)
         onSubmitted: function (value) {
             root.submitted();

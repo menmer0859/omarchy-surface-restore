@@ -7,6 +7,8 @@ export PYTHONDONTWRITEBYTECODE=1
 
 node tests/test_lock_face_policy.js
 node tests/test_display_wake_policy.js
+node tests/test_lock_activity_policy.js
+node tests/test_polkit_return.js
 
 for script in install.sh scripts/*.sh tests/*.sh; do
   bash -n "$script"
@@ -51,6 +53,7 @@ fi
 if [[ -r /usr/share/omarchy/shell/Commons/Translations.qml ]] && command -v quickshell >/dev/null 2>&1; then
   echo "Running native QML view tests..."
   bash tests/run-qml.sh
+  bash tests/run-polkit-qml.sh
 else
   echo 'Omarchy/Quickshell UI runtime unavailable; run tests/run-qml.sh on an Omarchy host.'
 fi
