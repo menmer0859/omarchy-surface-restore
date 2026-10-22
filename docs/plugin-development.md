@@ -1,14 +1,14 @@
 # Face UI plugin 2.1 (local acceptance fixes)
 
-This implements the approved HTML prototype as actual Qt Quick components using the existing Howdy/PAM authentication services. Source code is ready for review; this version has **not** been installed into the author's active shell or verified against a real camera in this development session.
+This implements the approved HTML prototype as Qt Quick components using the existing Howdy/PAM authentication services. It has been installed on the author's Surface Laptop 5 and received several rounds of manual use with satisfactory overall results. That feedback is not an item-by-item signoff for every scenario below.
 
 See [local acceptance fixes, installation and retest](local-acceptance-fixes.md) for the 2.1 changes. Development tests and build evidence do not replace physical acceptance.
 
 ## Omarchy integration
 
 - User plugin clones, schemaVersion 1, service entry points, `keepLoaded` and `omarchy.clonedFrom` preserve Omarchy's authentication service lifecycle and capability boundaries. No changes to `/usr/share/omarchy`.
-- Requires the installed shell's `Commons.Translations` API (available on the development host: Omarchy 4.5.0rc1, Quickshell 0.3.2.r7.g2b4501a-1). This is an API prerequisite, not a claim that all 4.x builds are compatible. Older 4.0.4 shells must update before installing this UI. Installers reject a missing API before mutation.
-- Shared QML source lives in `assets/face-ui`; each deployed plugin receives its own regular files under `FaceUi/` and flat JSON catalogs in `i18n/`. Development symlinks are dereferenced by the resource deployer; no installed component depends on the repository remaining in place.
+- Requires the installed shell's `Commons.Translations` API. The current real-device baseline is Omarchy 4.5.0rc1 with the local Quickshell update `0.3.2.r7.g2b4501a-2`. This is an API prerequisite, not a claim that every Omarchy release is compatible. Installers reject a missing API before mutation.
+- Shared QML source lives in `modules/face-auth/assets/face-ui`; each deployed plugin receives its own regular files under `FaceUi/` and flat JSON catalogs in `i18n/`. Development symlinks are dereferenced by the resource deployer; no installed component depends on the repository remaining in place.
 - No new lock engine, compositor patch, recognition model or authorization policy. Terminal sudo, graphical Polkit and screen unlock remain distinct PAM consumers.
 
 ## Languages and settings
@@ -44,7 +44,7 @@ The Surface service also retains the earlier fingerprint implementation and stat
 For an existing working Surface setup, first inspect targets:
 
 ```bash
-./scripts/install-plugin-ui.sh --check
+./modules/face-auth/install.sh plugin-ui --check
 ```
 
 While the desktop is **unlocked**, close other authentication dialogs, keep a terminal open, and update the QML plugins:
@@ -68,12 +68,12 @@ Rollback uses `./scripts/restore.sh`: select the snapshot corresponding to the U
 
 ```bash
 bash tests/run.sh
-bash tests/compile-services.sh
+bash modules/face-auth/tests/compile-services.sh
 ```
 
 The suite exercises the actual JS policy, PAM/configuration helpers, PTY consent and timeouts, resource deployment, and real QML views in an isolated offscreen shell. On an Omarchy host, it also checks live English → Chinese → English fallback, local-avatar fallback and portrait layout, literal markup-shaped identities, emitted method choices, and complete translated resource installation. `compile-services.sh` needs the session Wayland socket but only compiles the real lock/Polkit types; it does not instantiate them or create a PAM conversation. Automated tests deliberately do not unlock or take over the user's session.
 
-Manual acceptance after installation (not performed during source development):
+Manual acceptance matrix (overall multi-round use has been reported satisfactory; individual entries below were not all separately recorded):
 
 | Scenario | Expected result |
 |---|---|

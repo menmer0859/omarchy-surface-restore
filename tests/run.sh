@@ -5,55 +5,57 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 export PYTHONDONTWRITEBYTECODE=1
 
-node tests/test_lock_face_policy.js
-node tests/test_display_wake_policy.js
-node tests/test_lock_activity_policy.js
-node tests/test_polkit_return.js
+node modules/face-auth/tests/test_lock_face_policy.js
+node modules/face-auth/tests/test_display_wake_policy.js
+node modules/face-auth/tests/test_lock_activity_policy.js
+node modules/face-auth/tests/test_polkit_return.js
 
-for script in install.sh scripts/*.sh tests/*.sh; do
+for script in install.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh; do
   bash -n "$script"
 done
-bash -n scripts/sudo-face-consent
-python3 -m py_compile scripts/configure-sudo-pam.py
-python3 -m py_compile scripts/configure-polkit-pam.py
-python3 -m py_compile scripts/render-polkit-device-access.py
-python3 -m py_compile scripts/check-lock-plugin-clones.py
-python3 -m py_compile scripts/omarchy-polkit-howdy.py scripts/omarchy-face-auth-locale scripts/deploy-face-ui.py
+bash -n modules/face-auth/scripts/sudo-face-consent
+python3 -m py_compile modules/face-auth/scripts/configure-sudo-pam.py
+python3 -m py_compile modules/face-auth/scripts/configure-polkit-pam.py
+python3 -m py_compile modules/face-auth/scripts/render-polkit-device-access.py
+python3 -m py_compile modules/face-auth/scripts/check-lock-plugin-clones.py
+python3 -m py_compile modules/face-auth/scripts/omarchy-polkit-howdy.py modules/face-auth/scripts/omarchy-face-auth-locale modules/face-auth/scripts/deploy-face-ui.py
 
 module_dir=$(mktemp -d)
 trap 'rm -rf -- "$module_dir"' EXIT
 read -r -a pam_flags <<<"$(pkg-config --cflags --libs pam)"
 cc -shared -fPIC -Wall -Wextra -Werror "${pam_flags[@]}" \
-  -o "$module_dir/pam_surface_face_consent.so" scripts/pam_surface_face_consent.c
+  -o "$module_dir/pam_surface_face_consent.so" modules/face-auth/scripts/pam_surface_face_consent.c
 
 bash tests/test-common.sh
 bash tests/test-installer.sh
+bash modules/touch/tests/test-isolation.sh
 bash tests/test_restore_created_paths.sh
-python3 -m unittest discover -s tests -p 'test_*.py'
+bash tests/test_module_restore_isolation.sh
+python3 -m unittest discover -s modules/face-auth/tests -p 'test_*.py'
 
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck install.sh scripts/*.sh tests/*.sh
+  shellcheck install.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh
 else
   echo 'shellcheck not installed; skipped static analysis.'
 fi
 
 echo "Checking QML syntax..."
 if command -v qmlformat >/dev/null 2>&1; then
-  timeout 15 qmlformat assets/omarchy-lock/LockView.qml >/dev/null
-  timeout 15 qmlformat assets/omarchy-lock/Service.qml >/dev/null
-  timeout 15 qmlformat assets/omarchy-polkit/PolkitAgent.qml >/dev/null
+  timeout 15 qmlformat modules/face-auth/assets/omarchy-lock/LockView.qml >/dev/null
+  timeout 15 qmlformat modules/face-auth/assets/omarchy-lock/Service.qml >/dev/null
+  timeout 15 qmlformat modules/face-auth/assets/omarchy-polkit/PolkitAgent.qml >/dev/null
 elif [[ -x /usr/lib/qt6/bin/qmlformat ]]; then
-  timeout 15 /usr/lib/qt6/bin/qmlformat assets/omarchy-lock/LockView.qml >/dev/null
-  timeout 15 /usr/lib/qt6/bin/qmlformat assets/omarchy-lock/Service.qml >/dev/null
-  timeout 15 /usr/lib/qt6/bin/qmlformat assets/omarchy-polkit/PolkitAgent.qml >/dev/null
+  timeout 15 /usr/lib/qt6/bin/qmlformat modules/face-auth/assets/omarchy-lock/LockView.qml >/dev/null
+  timeout 15 /usr/lib/qt6/bin/qmlformat modules/face-auth/assets/omarchy-lock/Service.qml >/dev/null
+  timeout 15 /usr/lib/qt6/bin/qmlformat modules/face-auth/assets/omarchy-polkit/PolkitAgent.qml >/dev/null
 else
   echo 'qmlformat not installed; skipped QML syntax check.'
 fi
 
 if [[ -r /usr/share/omarchy/shell/Commons/Translations.qml ]] && command -v quickshell >/dev/null 2>&1; then
   echo "Running native QML view tests..."
-  bash tests/run-qml.sh
-  bash tests/run-polkit-qml.sh
+  bash modules/face-auth/tests/run-qml.sh
+  bash modules/face-auth/tests/run-polkit-qml.sh
 else
   echo 'Omarchy/Quickshell UI runtime unavailable; run tests/run-qml.sh on an Omarchy host.'
 fi

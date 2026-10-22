@@ -22,7 +22,7 @@
 
 这个方法保留原应用的授权请求、cookie 和所选管理员；断开旧 Session 回调后才取消旧会话，避免旧信号影响新会话。返回不会直接发送 y，也不直接启动相机。用户再次选择“使用人脸”后才同意扫描。若当前运行时没有新 API，插件保留密码路径并隐藏无法完成的返回动作。
 
-配方、补丁、构建与原生测试说明见 `packaging/quickshell-polkit-restart/README.md`。安装是对本机 Quickshell 包的一次更新，不能只复制 UI 就认为 Polkit 返回功能完整启用。
+配方、补丁、构建与原生测试说明见 `modules/face-auth/packaging/quickshell-polkit-restart/README.md`。安装是对本机 Quickshell 包的一次更新，不能只复制 UI 就认为 Polkit 返回功能完整启用。
 
 ## 安装
 
@@ -30,10 +30,13 @@
 
 若工具打开的终端提示 `The "no new privileges" flag is set`，sudo 尚未进入密码验证。请从 Omarchy 应用启动器手动打开新终端再执行，不能通过重新输入密码解决。`grep NoNewPrivs /proc/self/status` 应显示 `0`；不修改系统隔离设置来绕过该限制。
 
-在本轮开发工作区根目录执行，每行单独运行：
+二进制包不提交到 GitHub。先按当前系统版本审阅配方；仅在版本匹配后构建。以下步骤从仓库根目录逐行执行：
 
 ```bash
-sudo pacman -U packaging/quickshell-polkit-restart/quickshell-0.3.2.r7.g2b4501a-2-x86_64.pkg.tar.zst
+cd modules/face-auth/packaging/quickshell-polkit-restart
+makepkg -s
+sudo pacman -U ./quickshell-0.3.2.r7.g2b4501a-2-x86_64.pkg.tar.zst
+cd ../../../..
 ./install.sh plugin-ui
 ./install.sh sudo-face
 omarchy restart shell
@@ -41,14 +44,14 @@ omarchy restart shell
 
 `plugin-ui` 更新用户锁屏/Polkit 克隆并备份旧目录；`sudo-face` 更新终端提示与目录中的语言资源，沿用既有 PAM 管理块。不要删除人脸模型或重复录入来更新 UI。
 
-全新构建用 `cd packaging/quickshell-polkit-restart` 后运行 `makepkg`。这是本机对应版本的配方，不应用来降级其他用户的新版本 Quickshell。
+配方仅适用于本机对应源码提交，不应用来降级其他用户较新的 Quickshell。
 
 ## 自动验证
 
 ```bash
 bash tests/run.sh
-bash tests/compile-services.sh
-bash tests/run-polkit-native.sh /absolute/path/to/patched/quickshell-source
+bash modules/face-auth/tests/compile-services.sh
+bash modules/face-auth/tests/run-polkit-native.sh /absolute/path/to/patched/quickshell-source
 ```
 
 - 项目测试包括显示命令顺序、密码编辑保护、唤醒策略、PTY 同意/超时、中英文和真实离屏 QML。
@@ -57,6 +60,16 @@ bash tests/run-polkit-native.sh /absolute/path/to/patched/quickshell-source
 - 视觉回归检查 1024×768、有头像密码页的返回入口在视口内，无需滚动；程序清空密码不能产生用户活动并唤醒屏幕。
 
 这些检查证明代码行为和构建，不代表物理相机、DPMS 或真实应用授权已经验收。
+
+## 本机部署核验（2026-10-22）
+
+用户从正常系统终端完成安装，完成标记为 `20261022-233558`。Quickshell 已更新为 `0.3.2.r7.g2b4501a-2`；锁屏、图形授权插件均为 `2.1.0`，共 32 个资源文件逐一与源码一致；sudo helper、语言 helper 及两份终端语言目录也一致。两个系统 helper 均为 root:root、0755。
+
+四份 PAM 配置与安装前基线校验一致，原有认证规则未意外变更。Shell ping 返回 `ok`，锁屏 IPC 正常，图形 Polkit 代理已注册；新原生 `restartAuthentication()` API 已安装。安装日志与核验记录保存在本地忽略目录 `work/acceptance-fixes/`。
+
+启动日志出现一次 `Color.polkit` 颜色属性初始化警告，其他插件也有类似警告；中央 Color.qml 中对应属性存在，目前没有足够证据证明影响或不影响实际界面，列入 G1 视觉观察。缺少 `~/.face` 的图片警告对应默认头像回退。本节只确认部署和服务状态，以下实机验收尚未完成，ACC 问题暂不关闭。
+
+2026-10-23 用户补充“刚进行几轮测试，效果都算满意”。记录为本机多轮人工试用满意；未逐项提供下列 A/T/G 结果，不补造每项通过、长时功耗或相机释放时限证据。模块拆分与发布交接见主工作目录的 `docs/agent-handoff-face-auth-modules-2026-10-23.md`（当前尚未提交）。
 
 ## 本机复测：建议顺序
 

@@ -2,24 +2,24 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$root/scripts/common.sh"
+source "$root/lib/common.sh"
 
 usage() {
-  cat <<'EOF'
-Usage: ./install.sh [touch|face|sudo-face|polkit-face|all|check|plugin-ui]
+  cat <<'EOF_USAGE'
+Usage: ./install.sh [touch|face|sudo-face|polkit-face|plugin-ui|all|check]
 
-With no argument, an interactive menu is shown.
-  touch  Install linux-surface kernel support and iptsd
-  face   Configure Howdy and Omarchy lock-screen face/password switching
-  sudo-face  Optionally enable explicit-consent Howdy for terminal sudo
-  polkit-face  Optionally enable explicit-consent Howdy for graphical admin prompts
-  plugin-ui  Upgrade installed face plugin UI (no PAM changes)
-  all    Run both setup paths
-  check  Read-only system compatibility summary
+Install one module independently:
+  touch       Restore Surface touchscreen support (linux-surface + iptsd)
+  face        Configure IR face authentication and lock-screen integration
+  sudo-face   Optional consent-gated terminal sudo face authentication
+  polkit-face Optional consent-gated graphical admin authentication
+  plugin-ui   Upgrade installed face UI without changing PAM or Howdy
+  all         Legacy behavior: touch followed by initial face setup
+  check       Read-only compatibility summary
 
-Review the scripts and README before running. This project changes system
-packages and authentication configuration; it asks before applying changes.
-EOF
+With no argument, an interactive module selection is shown. Review each
+module's README and installer prompt before allowing system changes.
+EOF_USAGE
 }
 
 check_system() {
@@ -44,19 +44,19 @@ check_system() {
   fi
 }
 
-action=${1:-}
 if [[ $# -gt 1 ]]; then usage >&2; exit 2; fi
+action=${1:-}
 if [[ -z "$action" ]]; then
-  cat <<'EOF'
-Choose a setup path:
+  cat <<'EOF_MENU'
+Choose a module or optional face-authentication path:
   1) Restore touchscreen support
-  2) Configure IR face unlock and password switching
-  3) Enable consent-gated face authentication for sudo
+  2) Configure IR face unlock and lock-screen switching
+  3) Enable consent-gated face authentication for terminal sudo
   4) Enable consent-gated face authentication for graphical admin prompts
-  5) Do both touchscreen and lock-screen face setup
+  5) Install both modules (legacy touch + initial face behavior)
   6) Read-only compatibility check
   7) Exit
-EOF
+EOF_MENU
   read -r -p 'Selection [1-7]: ' selection
   case "$selection" in
     1) action=touch ;;
@@ -72,14 +72,11 @@ fi
 case "$action" in
   -h|--help|help) usage ;;
   check) check_system ;;
-  touch) exec "$root/scripts/install-touch.sh" ;;
-  face) exec "$root/scripts/install-face.sh" ;;
-  sudo-face) exec "$root/scripts/install-sudo-face.sh" ;;
-  plugin-ui) exec "$root/scripts/install-plugin-ui.sh" ;;
-  polkit-face) exec "$root/scripts/install-polkit-face.sh" ;;
+  touch) exec "$root/modules/touch/install.sh" ;;
+  face|sudo-face|polkit-face|plugin-ui) exec "$root/modules/face-auth/install.sh" "$action" ;;
   all)
-    "$root/scripts/install-touch.sh"
-    "$root/scripts/install-face.sh"
+    "$root/modules/touch/install.sh"
+    "$root/modules/face-auth/install.sh" face
     ;;
   *) usage >&2; exit 2 ;;
 esac

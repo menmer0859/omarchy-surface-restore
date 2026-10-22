@@ -43,10 +43,10 @@
 - Consumes: current root `install.sh` command list.
 - Produces: regression tests proving the old command meanings and that dispatch selects exactly one module entry.
 
-- [ ] Add assertions for all seven existing CLI forms, including unknown action and the legacy `all` definition.
-- [ ] Add isolated marker fixtures showing `face` never invokes the touch entry and `touch` never invokes face setup; avoid invoking real `pacman`, `sudo`, or camera tools.
-- [ ] Run the focused installer test and verify it fails if the dispatch points to the wrong module.
-- [ ] Keep the existing baseline test changes scoped to this fixture.
+- [x] Add assertions for all seven existing CLI forms, including unknown action and the legacy `all` definition.
+- [x] Add isolated marker fixtures showing `face` never invokes the touch entry and `touch` never invokes face setup; avoid invoking real `pacman`, `sudo`, or camera tools.
+- [x] Run the focused installer test and verify it fails if the dispatch points to the wrong module.
+- [x] Keep the existing baseline test changes scoped to this fixture.
 
 ### Task 2: Extract shared helpers and create root compatibility dispatch
 
@@ -61,12 +61,12 @@
 - Consumes: module installation contract from the spec.
 - Produces: root dispatcher invoking `modules/face-auth/install.sh` and `modules/touch/install.sh`; common helper path sourced by both modules.
 
-- [ ] Write the focused root-dispatch tests from Task 1 first and run them to see the expected failures.
-- [ ] Extract common checks, backup creation, snapshot manifest helpers into `lib/common.sh` without changing their on-disk snapshot format.
-- [ ] Keep `./scripts/restore.sh` executable and compatible; its implementation may dispatch to shared `lib/restore.sh` but must accept existing arguments and snapshots.
-- [ ] Update `install.sh` dispatch to call module entrypoints using absolute paths derived from the script location, independent of caller CWD.
-- [ ] Keep `all` exactly touch then initial face configuration; do not add sudo or Polkit without explicit separate user choice.
-- [ ] Run common, restore, and root CLI tests. Confirm an old-format fixture restores preexisting system files and removes only paths marked newly created.
+- [x] Write the focused root-dispatch tests from Task 1 first and run them to see the expected failures.
+- [x] Extract common checks, backup creation, snapshot manifest helpers into `lib/common.sh` without changing their on-disk snapshot format.
+- [x] Keep `./scripts/restore.sh` executable and compatible; its implementation may dispatch to shared `lib/restore.sh` but must accept existing arguments and snapshots.
+- [x] Update `install.sh` dispatch to call module entrypoints using absolute paths derived from the script location, independent of caller CWD.
+- [x] Keep `all` exactly touch then initial face configuration; do not add sudo or Polkit without explicit separate user choice.
+- [x] Run common, restore, and root CLI tests. Confirm an old-format fixture restores preexisting system files and removes only paths marked newly created.
 
 ### Task 3: Move the touchscreen feature into its standalone module
 
@@ -82,12 +82,12 @@
 - Consumes: shared `lib/common.sh` and root dispatcher contract.
 - Produces: direct module entry and old `./install.sh touch` behavior.
 
-- [ ] Add a fake-command test for exact touch effects: verified signing key, repository change, kernel/headers/iptsd install; assert no face/PAM/Howdy/lock resources are touched.
-- [ ] Move/adapt the current signed-key verification and `pacman -Syu --needed linux-surface linux-surface-headers iptsd` flow. Retain user confirmations and package upgrade warning.
-- [ ] Use module-root/repository-root resolution so invoking the module from another CWD still loads common helpers.
-- [ ] Ensure legacy `./install.sh touch` delegates to this implementation once and prints the same recovery/reboot guidance.
-- [ ] Document only touchscreen dependencies, packages, reboot, Limine fallback, and module-specific recovery in both languages.
-- [ ] Run focused touch and root compatibility tests; inspect fake-command log to prove no face path executed.
+- [x] Add a fake-command test for exact touch effects: verified signing key, repository change, kernel/headers/iptsd install; assert no face/PAM/Howdy/lock resources are touched.
+- [x] Move/adapt the current signed-key verification and `pacman -Syu --needed linux-surface linux-surface-headers iptsd` flow. Retain user confirmations and package upgrade warning.
+- [x] Use module-root/repository-root resolution so invoking the module from another CWD still loads common helpers.
+- [x] Ensure legacy `./install.sh touch` delegates to this implementation once and prints the same recovery/reboot guidance.
+- [x] Document only touchscreen dependencies, packages, reboot, Limine fallback, and module-specific recovery in both languages.
+- [x] Run focused touch and root compatibility tests; inspect fake-command log to prove no face path executed.
 
 ### Task 4: Move all IR face-auth functionality into its standalone module
 
@@ -103,15 +103,15 @@
 - Consumes: shared `lib/common.sh`, module root, existing Omarchy, Howdy/PAM and Quickshell API.
 - Produces: face module install/upgrade entry, all existing face CLI forwarding paths, same deployed plugin contents and PAM behavior.
 
-- [ ] Add fake-command regression checks proving face install does not invoke touch repo/key/package commands; keep sudo-face, polkit-face, and UI upgrade opt-in.
-- [ ] Move shared QML and both locale catalogs intact; preserve resource manifest versions and Omarchy clone metadata.
-- [ ] Update `deploy-face-ui.py` source-root discovery and callers so resources resolve inside the module and installed UI remains self-contained.
-- [ ] Adapt every face helper/configurator to resolve root, module root, assets, and common library robustly from any CWD; do not bake in `/home/eclipse` or user plugin names.
-- [ ] Preserve lock, sudo, and Polkit installers' preflight, explicit confirmation, root-owned helper modes, camera-node restriction, and backup behavior.
-- [ ] Move the current Quickshell recipe with both patches and hash declarations; update `PKGBUILD`, prepare verification, module README, native harness invocation and package tests for the new relative path. Keep the 0.3.1 recipe as clearly labeled legacy compatibility only.
-- [ ] Preserve root legacy scripts as executable argument-forwarding wrappers, not duplicated implementation. Direct calls with optional arguments and from another working directory must work.
-- [ ] Move/adapt face-specific tests (Howdy config/PAM, plugin deployment, consent, locale, Polkit device access/UI/native tests); update fixture root discovery.
-- [ ] Run focused face tests. Confirm no path in an installed plugin refers back into the checkout.
+- [x] Add fake-command regression checks proving face install does not invoke touch repo/key/package commands; keep sudo-face, polkit-face, and UI upgrade opt-in.
+- [x] Move shared QML and both locale catalogs intact; preserve resource manifest versions and Omarchy clone metadata.
+- [x] Update `deploy-face-ui.py` source-root discovery and callers so resources resolve inside the module and installed UI remains self-contained.
+- [x] Adapt every face helper/configurator to resolve root, module root, assets, and common library robustly from any CWD; do not bake in `/home/eclipse` or user plugin names.
+- [x] Preserve lock, sudo, and Polkit installers' preflight, explicit confirmation, root-owned helper modes, camera-node restriction, and backup behavior.
+- [x] Move the current Quickshell recipe with both patches and hash declarations; update `PKGBUILD`, prepare verification, module README, native harness invocation and package tests for the new relative path. Keep the 0.3.1 recipe as clearly labeled legacy compatibility only.
+- [x] Preserve root legacy scripts as executable argument-forwarding wrappers, not duplicated implementation. Direct calls with optional arguments and from another working directory must work.
+- [x] Move/adapt face-specific tests (Howdy config/PAM, plugin deployment, consent, locale, Polkit device access/UI/native tests); update fixture root discovery.
+- [x] Run focused face tests. Confirm no path in an installed plugin refers back into the checkout.
 
 ### Task 5: Make backups and restores module-aware without breaking prior snapshots
 
@@ -125,11 +125,11 @@
 - Consumes: module identifier (`face-auth` or `touch`) passed by installers and existing backup manifest format.
 - Produces: module-scoped new backups/restores plus backward-compatible restore of legacy snapshots.
 
-- [ ] Fixture-test old combined/separate snapshots before changing restore behavior.
-- [ ] Add module ownership metadata to new snapshots while keeping their original absolute-path inventory.
-- [ ] Add selected-module restore filtering only where metadata is present; for legacy snapshots retain the current displayed file list and confirmation instead of guessing the owner.
-- [ ] Test preexisting, newly created, and shared paths; a face restore must not remove touch repo/kernel files, and a touch restore must not edit PAM/model/plugin files.
-- [ ] Test public restore command and old snapshot selection from the repository root and module directories.
+- [x] Fixture-test old combined/separate snapshots before changing restore behavior.
+- [x] Add module ownership metadata to new snapshots while keeping their original absolute-path inventory.
+- [x] Add selected-module restore filtering only where metadata is present; for legacy snapshots retain the current displayed file list and confirmation instead of guessing the owner.
+- [x] Test preexisting, newly created, and shared paths; a face restore must not remove touch repo/kernel files, and a touch restore must not edit PAM/model/plugin files.
+- [x] Test public restore command and old snapshot selection from the repository root and module directories.
 
 ### Task 6: Rebuild bilingual root and module documentation
 
@@ -144,14 +144,14 @@
 - Consumes: final module CLI, boundaries, tests, verified version/acceptance evidence.
 - Produces: consistent bilingual selection guide and module-specific operating documentation.
 
-- [ ] Rewrite the root quick start around choosing face-auth, touch, or both; provide commands that exist after Task 2–4.
-- [ ] Document face setup, separate optional sudo/Polkit consent, plugin-only UI upgrade, versioned Quickshell requirement, password fallback, backup/restore and known matcher shutdown limits.
-- [ ] Document touch setup separately: signed repository key verification, system upgrade side effects, kernel fallback and reboot validation.
-- [ ] Reconcile old 4.0.4 historical references with the actual Surface Laptop 5 / Omarchy 4.5.0rc1 installed baseline. Keep model/support claims only where evidence exists.
-- [ ] Record user feedback as overall multi-round satisfaction; do not manufacture per-test pass records. Carry forward unresolved limitations and installation evidence.
-- [ ] Review research reports/CSV and local machine-specific logs before publication; preserve user research locally, publish only reviewed material.
-- [ ] Remove contradictory obsolete “not installed” lead statements while preserving chronology in progress history.
-- [ ] Verify every documented command and relative link resolves in the new tree; check English and Chinese installation paths independently.
+- [x] Rewrite the root quick start around choosing face-auth, touch, or both; provide commands that exist after Task 2–4.
+- [x] Document face setup, separate optional sudo/Polkit consent, plugin-only UI upgrade, versioned Quickshell requirement, password fallback, backup/restore and known matcher shutdown limits.
+- [x] Document touch setup separately: signed repository key verification, system upgrade side effects, kernel fallback and reboot validation.
+- [x] Reconcile old 4.0.4 historical references with the actual Surface Laptop 5 / Omarchy 4.5.0rc1 installed baseline. Keep model/support claims only where evidence exists.
+- [x] Record user feedback as overall multi-round satisfaction; do not manufacture per-test pass records. Carry forward unresolved limitations and installation evidence.
+- [x] Review research reports/CSV and local machine-specific logs before publication; preserve user research locally, publish only reviewed material.
+- [x] Remove contradictory obsolete “not installed” lead statements while preserving chronology in progress history.
+- [x] Verify every documented command and relative link resolves in the new tree; check English and Chinese installation paths independently.
 
 ### Task 7: Root integration checks, security-content review, and final diff
 
@@ -164,12 +164,12 @@
 - Consumes: both standalone modules and root compatibility entry.
 - Produces: release-reviewable local branch and evidence summary; no remote mutation.
 
-- [ ] From a clean fixture and from the module checkout root, invoke `./install.sh check`, each old CLI action in stub mode, module direct usage, and `all`; prove exact dispatch and no real system changes.
-- [ ] Run all available existing unit, policy, installer/restore, PAM compile, offscreen QML, Quickshell native/package, and Wayland type compilation checks using the relocated paths.
-- [ ] Inspect staged diff for model/image/credential/backup/build artifacts and ensure both module READMEs match actual behavior.
-- [ ] Run `git diff --check` and review `git diff --stat`/`git diff --name-status` for accidental broad moves or missing files.
-- [ ] Update the progress and handoff documents with final branch/head, module commands, test output, and known limitations.
-- [ ] Stop with a reviewable local branch and summarize readiness. Do not push, open/modify a PR, or merge in this plan.
+- [x] From a clean fixture and from the module checkout root, invoke `./install.sh check`, each old CLI action in stub mode, module direct usage, and `all`; prove exact dispatch and no real system changes.
+- [x] Run all available existing unit, policy, installer/restore, PAM compile, offscreen QML, Quickshell native/package, and Wayland type compilation checks using the relocated paths.
+- [x] Inspect staged diff for model/image/credential/backup/build artifacts and ensure both module READMEs match actual behavior.
+- [x] Run `git diff --check` and review `git diff --stat`/`git diff --name-status` for accidental broad moves or missing files.
+- [x] Update the progress and handoff documents with final branch/head, module commands, test output, and known limitations.
+- [x] Stop with a reviewable local branch and summarize readiness. Do not push, open/modify a PR, or merge in this plan.
 
 ## Self-review
 

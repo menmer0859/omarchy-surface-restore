@@ -13,6 +13,8 @@
 - 红外人脸识别：AUR 的 `howdy-git` 2.6.1 开发包与 `python-dlib-git`
 - 图形锁屏：Omarchy Quickshell 锁屏的用户插件克隆
 
+> 基线说明：以上环境信息是早期实机记录，Omarchy 4.0.4 的锁屏细节属于历史测试结果。后续 UI 2.1 的部署记录以 [本机验收记录](local-acceptance-fixes.md) 为准，当前插件/API 基线为 Omarchy 4.5.0rc1 与 Quickshell 0.3.2.r7.g2b4501a-2。请勿将旧版测试或单台 Laptop 5 的验证外推到其他型号/版本。
+
 ## 触摸屏恢复
 
 1. 保留 Omarchy 自带内核，不先卸载或覆盖它。
@@ -66,5 +68,5 @@ sudo 人脸支持独立于锁屏配置，默认不启用。安装器先确认 Ho
 - Surface 型号和 linux-surface 支持情况；不是每个 Surface 的触摸屏/IR 摄像头实现都相同。
 - Limine 当前启动项与磁盘加密设置；首次重启前确认原内核可用。
 - IR 摄像头节点、访问权限、画面亮度和 Howdy 阈值。
-- 当前 Omarchy 锁屏插件接口。此仓库的 Quickshell 锁屏克隆只在 Omarchy 4.0.4 实测，升级后先检查上游锁屏变化。
+- 当前 Omarchy 锁屏插件接口。旧记录中的 4.0.4 为历史版本；复用 UI 2.1 时先检查 translation API 与 Quickshell 版本要求，升级后也应核对上游锁屏变化。
 - Howdy AUR 包和 Python 依赖随 Arch 滚动更新；请先审阅 PKGBUILD 和软件包事务。
