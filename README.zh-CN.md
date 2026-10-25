@@ -1,11 +1,3 @@
----
-title: "Omarchy Surface Restore — 简体中文"
-type: project-readme
-date: 2026-10-26
-status: reviewed
-canonical_path: "https://github.com/menmer0859/omarchy-surface-restore/blob/main/README.zh-CN.md"
----
-
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/menmer0859/omarchy-surface-restore/2b3ba16494986dcf157dc5e980751fee9353a241/docs/images/readme/mark.svg" width="88" alt="Omarchy Surface Restore 标志：扫描框中的笑脸">
