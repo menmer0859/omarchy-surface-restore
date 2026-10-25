@@ -55,7 +55,7 @@ The real-device reference is **Surface Laptop 5 running Omarchy 4.5.0rc1 on Arch
 
 See the [verified setup](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md) for device and runtime details.
 
-Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [current main snapshot a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4). [PR #5](https://github.com/menmer0859/omarchy-surface-restore/pull/5) records the setup-widget changes in the repair branch; [snapshot 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8) contains that implementation. It remains pending integration into `main`.
+Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [current main snapshot a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4). The setup-widget implementation is recorded in [source snapshot 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8); its source is now included in `main`, while standalone plugin publication remains pending.
 
 ## Install with your agent
 
@@ -154,19 +154,19 @@ The touch module installs the upstream linux-surface kernel, matching headers, a
 | Face authentication | Howdy, selected PAM services, Omarchy lock and authorization UI |
 | Touchscreen | linux-surface repository, kernel, headers, and iptsd |
 
-### Configure through Omarchy (development)
+### Configure through Omarchy
 
 A bilingual setup widget checks readiness and lets you select lock screen, sudo, and Polkit independently. Its checks inspect configuration without starting the camera.
 
-The standalone plugin export is implemented and locally validated on the [setup-widget development branch](https://github.com/menmer0859/omarchy-surface-restore/tree/codex/omarchy-face-setup-wizard). **It has not yet reached `main`, and there is no published `omarchy plugin add` URL.** Use the source installer above today; see the [distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) for the publishing status.
+The standalone plugin export is now included in `main` and remains locally validated. **There is still no published `omarchy plugin add` URL:** the companion plugin repository and catalog listing are follow-up work. Use the source installer above; see the [distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) for current publishing status.
 
 <details>
 <summary>For maintainers: build and validate the plugin export</summary>
 
-These commands use the setup-widget development branch in a separate checkout. Choose a new or empty export directory:
+These commands use the current `main` branch in a separate checkout. Choose a new or empty export directory:
 
 ```bash
-git clone --branch codex/omarchy-face-setup-wizard https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.local/share/omarchy-surface-restore-dev"
+git clone --branch main https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.local/share/omarchy-surface-restore-dev"
 python3 "$HOME/.local/share/omarchy-surface-restore-dev/modules/face-auth/scripts/export-setup-plugin.py" --output /tmp/surface-face-setup
 omarchy plugin validate /tmp/surface-face-setup
 ```
@@ -186,7 +186,7 @@ Face matching uses Howdy locally. Enrolled models stay under `/etc/howdy/models/
 | Does cancelling guarantee the camera stops immediately? | Ending a UI/PAM request does not prove the separate Howdy matcher has released the camera. |
 | Can I restore the previous configuration? | Installers record snapshots under `/var/backups/omarchy-surface-restore`. Review and restore the relevant module snapshot. |
 
-**Known limitation:** immediate matcher/camera release is not guaranteed. **Unverified:** other Surface models and other Omarchy versions. **Pending:** setup-widget integration into `main` and publication of its standalone installation URL. The [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md) and [development distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) document these boundaries.
+**Known limitation:** immediate matcher/camera release is not guaranteed. **Unverified:** other Surface models and other Omarchy versions. **Pending:** publication of the standalone plugin repository and its catalog listing. The [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md) and [distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) document these boundaries.
 
 ### Restore the previous configuration
 
@@ -213,7 +213,7 @@ Built on [linux-surface](https://github.com/linux-surface/linux-surface), [Howdy
 | [Face authentication](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/README.md) | Installation, optional integrations, upgrades, and recovery |
 | [Touchscreen](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/touch/README.md) | Kernel installation, reboot verification, and recovery |
 | [Plugin behavior](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md) | Lock/wake rules, UI interactions, languages, and known limits |
-| [Plugin distribution (development branch)](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) | Standalone export and publishing status |
+| [Plugin distribution](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) | Standalone export and publishing status |
 | [Local acceptance](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/local-acceptance-fixes.md) | Previously fixed issues and manual retest scenarios |
 | [Quickshell packaging](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/packaging/quickshell-polkit-restart/README.md) | Return-to-face support and the compatible runtime build |
 
