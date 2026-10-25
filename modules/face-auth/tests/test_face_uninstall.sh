@@ -15,6 +15,7 @@ mkdir -p "$temp/bin" "$temp/target/etc/pam.d" "$temp/target/etc/howdy/models" "$
 printf 'old PAM stack\n' > "$temp/backups/run-1/etc-pam-sudo"
 mkdir -p "$temp/backups/run-1/etc/pam.d"
 mv "$temp/backups/run-1/etc-pam-sudo" "$temp/backups/run-1/etc/pam.d/sudo"
+printf '/etc/pam.d/sudo\n' > "$temp/backups/run-1/.backed_up_paths"
 printf 'face PAM stack\n' > "$temp/target/etc/pam.d/sudo"
 printf 'model-data\n' > "$temp/target/etc/howdy/models/alice.dat"
 printf '%s\n%s\n' '/usr/local/libexec/omarchy-test-helper' '/etc/howdy/models/alice.dat' > "$temp/backups/run-1/.created_paths"
@@ -55,13 +56,17 @@ fi
 SYSTEMCTL
 cat > "$temp/bin/omarchy-shell" <<'OMARCHY_SHELL'
 #!/usr/bin/env bash
-if [[ "$*" == 'shell listPlugins' ]]; then printf '[]\n'; exit 0; fi
+if [[ "$*" == 'lock isLocked' ]]; then printf '%s\n' "${TEST_LOCK_STATE:-false}"; exit 0; fi
+if [[ "$*" == 'shell listPlugins' ]]; then
+  [[ ${TEST_PLUGIN_IPC_FAIL:-0} != 1 ]] || exit 1
+  printf '[]\n'; exit 0
+fi
 if [[ "$*" == 'shell rescanPlugins' ]]; then exit 0; fi
 exit 2
 OMARCHY_SHELL
 cat > "$temp/bin/omarchy" <<'OMARCHY'
 #!/usr/bin/env bash
-[[ "$*" == 'plugin disable surface.lock' || "$*" == 'plugin disable alice.polkit' ]]
+[[ "$*" == 'plugin disable surface.lock' || "$*" == 'plugin disable alice.polkit' || "$*" == 'restart shell' ]]
 OMARCHY
 chmod +x "$temp/bin"/*
 
@@ -112,6 +117,20 @@ SURFACE_SETUP_TESTING=1 python3 "$state_script" --state-file "$plugin_temp/state
 : > "$plugin_temp/backups/plugin-run/.backed_up_paths"
 SURFACE_SETUP_TESTING=1 python3 "$state_script" --state-file "$plugin_temp/state/face-auth.json" capture \
   --backup-root "$plugin_temp/backups" --target-root "$plugin_target" >/dev/null
+for failure in locked ipc; do
+  lock_state=false; ipc_fail=0
+  [[ $failure != locked ]] || lock_state=true
+  [[ $failure != ipc ]] || ipc_fail=1
+  if printf 'y\n' | PATH="$temp/bin:$PATH" SURFACE_SETUP_TESTING=1 HOME="$temp/home/alice" USER=alice PACMAN_STATE="$packages" \
+    TEST_LOCK_STATE="$lock_state" TEST_PLUGIN_IPC_FAIL="$ipc_fail" \
+    SURFACE_SETUP_FACE_STATE_FILE="$plugin_temp/state/face-auth.json" \
+    SURFACE_SETUP_BACKUP_ROOT="$plugin_temp/backups" SURFACE_SETUP_TARGET_ROOT="$plugin_target" \
+    bash "$script" >"$plugin_temp/$failure.log" 2>&1; then
+    fail "graphical uninstall proceeded with $failure desktop state"
+  fi
+  [[ -f "$plugin_path/manifest.json" ]] || fail "$failure refusal moved a plugin"
+  assert_eq "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$plugin_temp/state/face-auth.json")" installed "$failure refusal leaves transaction intact"
+done
 set +e
 printf 'y\n' | PATH="$temp/bin:$PATH" SURFACE_SETUP_TESTING=1 HOME="$temp/home/alice" SURFACE_SETUP_TEST_HOME=/home/alice USER=alice PACMAN_STATE="$packages" \
   SURFACE_SETUP_FACE_STATE_FILE="$plugin_temp/state/face-auth.json" \

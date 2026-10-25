@@ -102,6 +102,24 @@ class RestoreSnapshotTests(unittest.TestCase):
         self.assertEqual(repeated.returncode, 0, repeated.stderr)
         self.assertEqual(keep_file.read_text(encoding="utf-8"), "unrelated\n")
 
+    def test_legacy_restore_never_deploys_uninstall_archives(self) -> None:
+        (self.snapshot / "models").mkdir()
+        (self.snapshot / "models/alice.dat").write_text("private model")
+        (self.snapshot / "removed-plugins/surface.lock").mkdir(parents=True)
+        (self.snapshot / "removed-plugins/surface.lock/manifest.json").write_text("{}")
+        result = self.run_restore()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.target / "models").exists())
+        self.assertFalse((self.target / "removed-plugins").exists())
+
+    def test_missing_indexed_backup_stops_before_deleting_created_files(self) -> None:
+        (self.snapshot / ".backed_up_paths").write_text("/etc/pam.d/sudo\n")
+        (self.snapshot / ".created_paths").write_text("/helper\n")
+        (self.target / "helper").write_text("needed by the current PAM stack")
+        result = self.run_restore()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.target / "helper").exists())
+
     def test_restores_a_symlink_without_following_it(self) -> None:
         source = self.snapshot / "etc/howdy/current-camera"
         source.parent.mkdir(parents=True)

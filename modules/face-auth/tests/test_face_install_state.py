@@ -49,6 +49,66 @@ class FaceInstallStateTests(unittest.TestCase):
         self.assertEqual(result["id"], "run-2")
         self.assertEqual(result["integrations"], ["sudo"])
 
+    def test_missing_path_index_cannot_silently_forget_managed_files(self):
+        base = Path(self.temp.name)
+        snapshot = base / "backups/run-1"
+        snapshot.mkdir(parents=True)
+        (snapshot / ".created_paths").write_text("/helper\n")
+        (snapshot / ".backed_up_paths").write_text("")
+        target = base / "target"
+        target.mkdir()
+        (target / "helper").write_text("installed")
+        state_module.begin(self.path, "alice", [], "run-1", ["sudo"])
+        state_module.capture(self.path, base / "backups", target)
+        (snapshot / ".created_paths").unlink()
+        with self.assertRaises(ValueError):
+            state_module.verify(self.path, base / "backups", target)
+
+    def test_corrupt_original_backup_blocks_uninstall_verification(self):
+        base = Path(self.temp.name)
+        snapshot = base / "backups/run-1"
+        snapshot.mkdir(parents=True)
+        (snapshot / ".created_paths").write_text("")
+        (snapshot / ".backed_up_paths").write_text("/helper\n")
+        (snapshot / "helper").write_text("original")
+        target = base / "target"
+        target.mkdir()
+        (target / "helper").write_text("installed")
+        state_module.begin(self.path, "alice", [], "run-1", ["sudo"])
+        state_module.capture(self.path, base / "backups", target)
+        (snapshot / "helper").write_text("damaged backup")
+        with self.assertRaises(ValueError):
+            state_module.verify(self.path, base / "backups", target)
+
+    def test_uninstall_retry_only_accepts_installed_or_original_file_content(self):
+        base = Path(self.temp.name)
+        snapshot = base / "backups/run-1"
+        snapshot.mkdir(parents=True)
+        (snapshot / ".created_paths").write_text("")
+        (snapshot / ".backed_up_paths").write_text("/helper\n")
+        (snapshot / "helper").write_text("original")
+        target = base / "target"
+        target.mkdir()
+        (target / "helper").write_text("installed")
+        state_module.begin(self.path, "alice", [], "run-1", ["sudo"])
+        state_module.capture(self.path, base / "backups", target)
+        (target / "helper").write_text("original")
+        self.assertEqual(state_module.verify(self.path, base / "backups", target, allow_restored=True), [])
+        (target / "helper").write_text("user edit after interrupted uninstall")
+        self.assertEqual(state_module.verify(self.path, base / "backups", target, allow_restored=True), ["/helper"])
+
+    def test_install_cannot_restart_an_unfinished_uninstall(self):
+        state_module.begin(self.path, "alice", [], "run-1", ["lock"])
+        state_module.set_status(self.path, "uninstalling")
+        with self.assertRaises(ValueError):
+            state_module.begin(self.path, "alice", [], "run-2", ["sudo"])
+
+    def test_completed_uninstall_cannot_reuse_its_old_snapshot_id(self):
+        state_module.begin(self.path, "alice", [], "run-1", ["lock"])
+        state_module.set_status(self.path, "uninstalled")
+        with self.assertRaises(ValueError):
+            state_module.begin(self.path, "alice", [], "run-1", ["sudo"])
+
     def test_capture_and_verify_detect_user_changes_after_install(self):
         base = Path(self.temp.name)
         backup_root = base / "backups"

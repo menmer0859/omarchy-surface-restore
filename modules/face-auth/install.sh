@@ -4,7 +4,7 @@ set -euo pipefail
 module_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SURFACE_SETUP_MODULE=face-auth
 export SURFACE_SETUP_MODULE
-SURFACE_SETUP_BACKUP_ID=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)-face-auth}
+SURFACE_SETUP_BACKUP_ID=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)-face-auth-$BASHPID}
 export SURFACE_SETUP_BACKUP_ID
 repo_root=$(cd "$module_root/../.." && pwd)
 source "$repo_root/lib/common.sh"
@@ -44,7 +44,25 @@ case $action in
     capture_face_transaction
     set_face_transaction_status installed
     ;;
-  plugin-ui) exec "$module_root/scripts/install-plugin-ui.sh" "$@" ;;
+  plugin-ui)
+    [[ $# -eq 0 || ( $# -eq 1 && $1 == --check ) ]] || { usage >&2; exit 2; }
+    if [[ ${1:-} == --check ]]; then exec "$module_root/scripts/install-plugin-ui.sh" "$@"; fi
+    state_file=/var/lib/omarchy-surface-restore/face-auth.json
+    [[ ${SURFACE_SETUP_TESTING:-0} != 1 ]] || state_file=${SURFACE_SETUP_FACE_STATE_FILE:-$state_file}
+    require_commands sudo python3
+    if sudo test -e "$state_file"; then
+      state_json=$(sudo python3 "$module_root/scripts/face-install-state.py" --state-file "$state_file" show)
+      state_status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$state_json")
+      [[ $state_status == installed ]] || die 'Complete or remove the current face-auth transaction before upgrading its UI.'
+      mapfile -t integrations < <(python3 -c 'import json,sys; print("\n".join(json.load(sys.stdin)["integrations"]))' <<<"$state_json")
+      begin_face_transaction "${integrations[@]}"
+      bash "$module_root/scripts/install-plugin-ui.sh"
+      capture_face_transaction
+      set_face_transaction_status installed
+    else
+      exec "$module_root/scripts/install-plugin-ui.sh"
+    fi
+    ;;
   -h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

@@ -95,7 +95,8 @@ for manifest in plugins.glob("*/manifest.json"):
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         continue
-    if data.get("omarchy", {}).get("clonedFrom") == "omarchy.polkit":
+    metadata = data.get("omarchy") or {}
+    if isinstance(metadata, dict) and metadata.get("clonedFrom") == "omarchy.polkit":
         print(manifest.parent)
         break
 PY
@@ -167,8 +168,7 @@ omarchy["surfaceFaceAuth"] = True
 data["version"] = "2.1.0"
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
-omarchy-shell shell rescanPlugins >/dev/null
-omarchy plugin enable "$clone_user.polkit"
+enable_face_plugin "$clone_user.polkit"
 
 if [[ ! -e "$service" ]]; then
   sudo install -D -o root -g root -m 0644 "$vendor_service" "$service"

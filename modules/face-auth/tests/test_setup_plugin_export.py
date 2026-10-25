@@ -52,6 +52,10 @@ class SetupPluginExportTests(unittest.TestCase):
         self._write("modules/face-auth/scripts/run-face-setup.sh")
         self._write("modules/face-auth/packaging/quickshell-polkit-restart/PKGBUILD")
         self._write("modules/face-auth/install.sh")
+        self._write("uninstall.sh")
+        self._write("modules/face-auth/scripts/face-install-state.py")
+        self._write("modules/face-auth/scripts/restore-snapshot.py")
+        self._write("modules/face-auth/scripts/uninstall-face-auth.sh")
         self._write("lib/common.sh")
         self._write("lib/restore.sh")
 
@@ -81,6 +85,8 @@ class SetupPluginExportTests(unittest.TestCase):
             "modules/face-auth/assets/omarchy-lock/Service.qml",
             "modules/face-auth/assets/omarchy-lock/FaceUi/AuthStrings.qml",
             "modules/face-auth/assets/omarchy-polkit/PolkitAgent.qml",
+            "uninstall.sh",
+            "modules/face-auth/scripts/uninstall-face-auth.sh",
             "lib/common.sh",
             "lib/restore.sh",
         ):

@@ -46,12 +46,12 @@ if ! sudo test -d "$snapshot"; then
   sudo chmod 0600 "$snapshot/.created_paths" "$snapshot/.backed_up_paths"
 fi
 
-if [[ $status != uninstalling ]]; then
-  if ! verification=$(sudo python3 "$state_script" --state-file "$state_file" verify \
-    --backup-root "$backup_root" --target-root "$target_root" 2>&1); then
-    printf '%s\n' "$verification" >&2
-    die 'Uninstall stopped before changing files because the install state is incomplete or its files changed afterward. Review the listed paths and preserve your changes before retrying.'
-  fi
+verification_args=()
+[[ $status != uninstalling ]] || verification_args+=(--allow-restored)
+if ! verification=$(sudo python3 "$state_script" --state-file "$state_file" verify \
+  --backup-root "$backup_root" --target-root "$target_root" "${verification_args[@]}" 2>&1); then
+  printf '%s\n' "$verification" >&2
+  die 'Uninstall stopped before changing files because the install state is incomplete or its files changed afterward. Review the listed paths and preserve your changes before retrying.'
 fi
 
 snapshot_tracks_path() {
@@ -59,6 +59,19 @@ snapshot_tracks_path() {
   sudo grep -Fxq -- "$path" "$snapshot/.created_paths" 2>/dev/null \
     || sudo grep -Fxq -- "$path" "$snapshot/.backed_up_paths" 2>/dev/null
 }
+
+graphical_changes=false
+plugin_listing='[]'
+if snapshot_tracks_path "$plugin_home/.config/omarchy/shell.json" \
+  || snapshot_tracks_path "$plugin_home/.config/omarchy/plugins/surface.lock" \
+  || snapshot_tracks_path "$plugin_home/.config/omarchy/plugins/$enrolling_user.polkit"; then
+  graphical_changes=true
+  require_commands omarchy omarchy-shell jq
+  locked=$(omarchy-shell lock isLocked) || die 'Could not confirm lock state; unlock the desktop before uninstalling graphical authentication.'
+  [[ $locked == false ]] || die 'Unlock the desktop before uninstalling graphical authentication.'
+  plugin_listing=$(omarchy-shell shell listPlugins) || die 'Could not contact the Omarchy plugin registry; no files were changed.'
+  jq -e 'type == "array"' <<<"$plugin_listing" >/dev/null || die 'Invalid Omarchy plugin registry response; no files were changed.'
+fi
 
 packages_present_before=$(python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)["packages_present_before"]))' <<<"$state_json")
 planned_packages=()
@@ -109,7 +122,7 @@ remove_user_plugin() {
   [[ -e $plugin_path || -L $plugin_path ]] || return 0
   snapshot_tracks_path "$plugin_logical_path" || return 0
   if command -v omarchy-shell >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-    if omarchy-shell shell listPlugins | jq -e --arg id "$plugin_id" 'any(.[]; .id == $id and .enabled == true)' >/dev/null; then
+    if jq -e --arg id "$plugin_id" 'any(.[]; .id == $id and .enabled == true)' <<<"$plugin_listing" >/dev/null; then
       omarchy plugin disable "$plugin_id"
     fi
     sudo install -d -m 0700 "$snapshot/removed-plugins"
@@ -143,5 +156,12 @@ for package in howdy-git python-dlib-git; do
   fi
 done
 
+if [[ $graphical_changes == true ]]; then
+  locked=$(omarchy-shell lock isLocked) || die 'Configuration restored, but the shell could not be reloaded; unlock the desktop and rerun the uninstaller.'
+  [[ $locked == false ]] || die 'Configuration restored; unlock the desktop and rerun the uninstaller to reload the shell.'
+  omarchy restart shell
+fi
+
 sudo python3 "$state_script" --state-file "$state_file" status uninstalled >/dev/null
 info 'Recorded face-authentication configuration has been removed. The enrolled model is retained in the protected backup.'
+printf 'Before closing this terminal, verify password authentication with sudo -k -v and, if selected, pkexec /usr/bin/id and a lock-screen password test.\n'

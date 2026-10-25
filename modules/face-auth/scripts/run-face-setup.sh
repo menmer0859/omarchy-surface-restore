@@ -89,7 +89,17 @@ if [[ "$selected_polkit" == true ]]; then
   bash "$module_root/scripts/install-polkit-face.sh"
 fi
 
-status_json=$(read_status) || { echo 'Could not verify the selected authentication integrations.' >&2; exit 1; }
+# Omarchy persists enablement asynchronously; wait briefly for the selected
+# configuration to become observable instead of reporting an early failure.
+for ((attempt = 0; attempt < 40; attempt++)); do
+  status_json=$(read_status) || { echo 'Could not verify the selected authentication integrations.' >&2; exit 1; }
+  ready=true
+  [[ "$selected_lock" != true ]] || status_true "$status_json" lock.ready || ready=false
+  [[ "$selected_sudo" != true ]] || status_true "$status_json" sudo.ready || ready=false
+  [[ "$selected_polkit" != true ]] || status_true "$status_json" polkit.ready || ready=false
+  [[ $ready != true ]] || break
+  sleep 0.05
+done
 if [[ "$selected_lock" == true ]]; then
   status_true "$status_json" lock.passwordFallback || { echo 'Lock password fallback is not ready; the face lock was not marked complete.' >&2; exit 1; }
   status_true "$status_json" lock.ready || { echo 'Lock face authentication did not pass the final readiness check.' >&2; exit 1; }

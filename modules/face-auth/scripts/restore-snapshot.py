@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 
-METADATA_FILES = {".created_paths", ".backed_up_paths", ".surface_module", ".surface_state.json"}
+METADATA_FILES = {".created_paths", ".backed_up_paths", ".surface_module", ".surface_state.json", "models", "removed-plugins"}
 
 
 class RestoreError(Exception):
@@ -170,8 +170,9 @@ def restore(snapshot_path: Path, target_root: Path) -> None:
     for absolute in backed_up:
         source = snapshot.joinpath(*absolute.parts[1:])
         destination = _relative_target(target, absolute)
-        if source.is_symlink() or source.exists():
-            restore_plan.append((source, destination))
+        if not source.is_symlink() and not source.exists():
+            raise RestoreError(f"indexed backup is missing: {absolute}")
+        restore_plan.append((source, destination))
 
     # Validate every destination before the first write so a bad later record
     # cannot leave a partially restored tree.

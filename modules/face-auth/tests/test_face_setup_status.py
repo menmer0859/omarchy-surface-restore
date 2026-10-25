@@ -40,7 +40,7 @@ class FaceSetupStatusTests(unittest.TestCase):
         plugins = self.home / ".config/omarchy/plugins"
         shell_config = self.home / ".config/omarchy/shell.json"
         shell_config.parent.mkdir(parents=True, exist_ok=True)
-        shell_config.write_text(json.dumps({"plugins": ["surface.lock", "alice.polkit"]}), encoding="utf-8")
+        shell_config.write_text(json.dumps({"plugins": [{"id": "surface.lock"}, {"id": "alice.polkit"}]}), encoding="utf-8")
         (plugins / "surface.lock").mkdir(parents=True)
         (plugins / "surface.lock/manifest.json").write_text(json.dumps({
             "id": "surface.lock", "omarchy": {"clonedFrom": "omarchy.lock"}
@@ -86,6 +86,27 @@ class FaceSetupStatusTests(unittest.TestCase):
         self.assertTrue(result["polkit"]["enabled"])
         self.assertTrue(result["polkit"]["ready"])
         self.assertEqual(result["polkit"]["returnToFace"], "unknown")
+
+    def test_disabled_override_wins_over_a_plugin_entry(self):
+        config = self.home / ".config/omarchy/shell.json"
+        config.write_text(json.dumps({"plugins": [{"id": "surface.lock"}, {"id": "alice.polkit"}],
+                                      "disabledPlugins": ["surface.lock", "alice.polkit"]}))
+        result = self._collect()
+        self.assertFalse(result["lock"]["pluginEnabled"])
+        self.assertFalse(result["polkit"]["pluginEnabled"])
+
+    def test_string_plugin_entries_do_not_match_omarchy_object_schema(self):
+        (self.home / ".config/omarchy/shell.json").write_text(
+            json.dumps({"plugins": ["surface.lock", "alice.polkit"]}))
+        self.assertFalse(self._collect()["lock"]["pluginEnabled"])
+
+    def test_another_accounts_polkit_plugin_does_not_make_this_account_ready(self):
+        plugins = self.home / ".config/omarchy/plugins"
+        (plugins / "alice.polkit/manifest.json").unlink()
+        (plugins / "bob.polkit").mkdir()
+        (plugins / "bob.polkit/manifest.json").write_text(json.dumps({
+            "id": "bob.polkit", "omarchy": {"clonedFrom": "omarchy.polkit", "surfaceFaceAuth": True}}))
+        self.assertFalse(self._collect()["polkit"]["ready"])
 
     def test_missing_camera_and_model_are_reported_without_mutation(self):
         (self.root / "dev/v4l/by-path/pci-ir-video-index0").unlink()

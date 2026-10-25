@@ -19,6 +19,12 @@ new_fixture() {
 import json, os
 from pathlib import Path
 state = dict(item.split("=", 1) for item in Path(os.environ["TEST_STATE_FILE"]).read_text().split())
+if os.environ.get("TEST_DELAY_READY") == "1" and state.get("lock") == "1":
+    counter = Path(os.environ["TEST_STATE_FILE"] + ".reads")
+    count = int(counter.read_text()) if counter.exists() else 0
+    counter.write_text(str(count + 1))
+    if count < 2:
+        state["lock"] = "0"
 def yes(key): return state.get(key) == "1"
 print(json.dumps({
     "schemaVersion": 1,
@@ -57,9 +63,6 @@ run_case() {
   local label="$1" selection="$2" initial="$3" expected_rc="$4" expected_log="$5" fail_at="${6:-}"
   local root="$temp/$label" state="$temp/$label.state" log="$temp/$label.log"
   new_fixture "$root"
-  mkdir -p "$temp/$label.backups/$label"
-  : > "$temp/$label.backups/$label/.created_paths"
-  : > "$temp/$label.backups/$label/.backed_up_paths"
   mkdir -p "$root/bin"
   cat > "$root/bin/sudo" <<'SUDO'
 #!/usr/bin/env bash
@@ -75,7 +78,7 @@ PACMAN
   : > "$log"
   set +e
   # shellcheck disable=SC2086
-  TEST_STATE_FILE="$state" TEST_LOG="$log" FAIL_AT="$fail_at" PATH="$root/bin:$PATH" USER=test-user SURFACE_SETUP_TESTING=1 \
+  TEST_DELAY_READY="${TEST_DELAY_READY:-0}" TEST_STATE_FILE="$state" TEST_LOG="$log" FAIL_AT="$fail_at" PATH="$root/bin:$PATH" USER=test-user SURFACE_SETUP_TESTING=1 \
     SURFACE_SETUP_FACE_STATE_FILE="$temp/$label.ledger" SURFACE_SETUP_BACKUP_ROOT="$temp/$label.backups" \
     SURFACE_SETUP_BACKUP_ID="$label" SURFACE_SETUP_TARGET_ROOT="$root" \
     bash "$root/modules/face-auth/scripts/run-face-setup.sh" $selection >"$temp/$label.out" 2>&1
@@ -86,6 +89,8 @@ PACMAN
   if [[ -n $selection && $label != no-camera ]]; then
     local ledger="$temp/$label.ledger"
     [[ -s "$ledger" ]] || fail "$label did not create the transaction ledger before setup"
+    [[ -f "$temp/$label.backups/$label/.created_paths" && -f "$temp/$label.backups/$label/.backed_up_paths" ]] || fail "$label did not initialize both snapshot indexes"
+    assert_eq "$(cat "$temp/$label.backups/$label/.surface_module")" face-auth "$label snapshot module label"
     local expected_status=installing
     [[ $expected_rc -eq 0 ]] && expected_status=installed
     assert_eq "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$ledger")" "$expected_status" "$label ledger status"
@@ -96,6 +101,10 @@ run_case no-selection "" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 2 
 run_case sudo-only "--sudo" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 0 "howdy sudo"
 run_case polkit-only "--polkit" "camera=1 howdy=1 lock=0 password=1 sudo=0 polkit=0" 0 "polkit"
 run_case lock-and-sudo "--lock --sudo" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 0 "howdy lock sudo"
+run_case lock-only "--lock" "camera=1 howdy=1 lock=0 password=1 sudo=0 polkit=0" 0 "lock"
+run_case sudo-and-polkit "--sudo --polkit" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 0 "howdy sudo polkit"
+run_case all-three "--lock --sudo --polkit" "camera=1 howdy=1 lock=0 password=1 sudo=0 polkit=0" 0 "lock sudo polkit"
+TEST_DELAY_READY=1 run_case delayed-lock-ready "--lock" "camera=1 howdy=1 lock=0 password=1 sudo=0 polkit=0" 0 "lock"
 run_case lock-no-password "--lock" "camera=1 howdy=1 lock=0 password=0 sudo=0 polkit=0" 1 "lock"
 run_case no-camera "--lock" "camera=0 howdy=0 lock=0 password=1 sudo=0 polkit=0" 1 ""
 run_case stop-after-failure "--lock --sudo" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 9 "howdy" howdy

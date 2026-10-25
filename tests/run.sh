@@ -11,7 +11,7 @@ node modules/face-auth/tests/test_lock_activity_policy.js
 node modules/face-auth/tests/test_polkit_return.js
 node modules/face-auth/tests/test-setup-model.js
 
-for script in install.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh; do
+for script in install.sh uninstall.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh; do
   bash -n "$script"
 done
 bash -n modules/face-auth/scripts/sudo-face-consent
@@ -36,13 +36,15 @@ bash tests/test_restore_created_paths.sh
 bash tests/test_module_restore_isolation.sh
 bash modules/face-auth/tests/test_run_face_setup.sh
 bash modules/face-auth/tests/test_face_uninstall.sh
+bash modules/face-auth/tests/test_tracked_ui_upgrade.sh
 bash tests/test_quick_install.sh
+bash tests/test_face_plugin_enable.sh
 bash modules/face-auth/tests/test_face_setup_distribution.sh
 python3 -m unittest discover -s modules/face-auth/tests -p 'test_*.py'
 python3 -m unittest tests/test_restore_snapshot.py
 
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck install.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh
+  shellcheck install.sh uninstall.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh
 else
   echo 'shellcheck not installed; skipped static analysis.'
 fi

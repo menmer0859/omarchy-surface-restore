@@ -8,7 +8,7 @@ if [[ ${SURFACE_SETUP_TESTING:-0} == 1 ]]; then
 else
   SURFACE_SETUP_BACKUP_ROOT=/var/backups/omarchy-surface-restore
 fi
-SURFACE_SETUP_BACKUP_ID=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)}
+SURFACE_SETUP_BACKUP_ID=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)-$BASHPID}
 export SURFACE_SETUP_BACKUP_ROOT SURFACE_SETUP_BACKUP_ID SURFACE_SETUP_MODULE
 
 record_snapshot_module() {
@@ -172,9 +172,27 @@ begin_face_transaction() {
   for package in howdy-git python-dlib-git; do
     if pacman -Qq "$package" >/dev/null 2>&1; then arguments+=(--package-present "$package"); fi
   done
+  if sudo test -e "$state_file"; then
+    local previous previous_status target_root=/
+    previous=$(sudo python3 "$state_script" --state-file "$state_file" show) || die 'Could not inspect the existing face-auth transaction.'
+    previous_status=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$previous")
+    if [[ $previous_status == installed ]]; then
+      [[ ${SURFACE_SETUP_TESTING:-0} != 1 ]] || target_root=${SURFACE_SETUP_TARGET_ROOT:-/}
+      sudo python3 "$state_script" --state-file "$state_file" verify \
+        --backup-root "$SURFACE_SETUP_BACKUP_ROOT" --target-root "$target_root" \
+        || die 'Installed face-auth files changed. Review the reported conflicts before reinstalling or upgrading.'
+    fi
+  fi
   SURFACE_SETUP_BACKUP_ID=$(sudo python3 "$state_script" "${arguments[@]}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])') \
     || die 'Could not create or read the protected face-auth install record.'
   export SURFACE_SETUP_BACKUP_ID SURFACE_SETUP_FACE_STATE_FILE="$state_file"
+  SURFACE_SETUP_MODULE=face-auth
+  export SURFACE_SETUP_MODULE
+  local snapshot="$SURFACE_SETUP_BACKUP_ROOT/$SURFACE_SETUP_BACKUP_ID"
+  sudo install -d -m 0700 "$snapshot"
+  sudo touch "$snapshot/.created_paths" "$snapshot/.backed_up_paths"
+  sudo chmod 0600 "$snapshot/.created_paths" "$snapshot/.backed_up_paths"
+  record_snapshot_module
 }
 
 set_face_transaction_status() {
@@ -198,4 +216,22 @@ capture_face_transaction() {
   fi
   sudo python3 "$face_root/modules/face-auth/scripts/face-install-state.py" --state-file "$state_file" \
     capture --backup-root "$backup_root" --target-root "$target_root" >/dev/null
+}
+
+# Plugin scans are asynchronous. Wait for discovery before asking Omarchy to
+# enable a newly copied service, as Omarchy's own clone command does.
+enable_face_plugin() {
+  local plugin_id=${1:?Usage: enable_face_plugin ID} attempt discovered=false listing
+  require_commands omarchy omarchy-shell jq sleep
+  omarchy-shell shell rescanPlugins >/dev/null || die 'Could not rescan Omarchy plugins.'
+  for ((attempt = 0; attempt < 40; attempt++)); do
+    listing=$(omarchy-shell shell listPlugins) || die 'Could not inspect Omarchy plugin discovery.'
+    if jq -e --arg id "$plugin_id" 'any(.[]; .id == $id)' <<<"$listing" >/dev/null; then
+      discovered=true
+      break
+    fi
+    sleep 0.05
+  done
+  [[ $discovered == true ]] || die "Omarchy did not discover $plugin_id; keep the password path and inspect plugin validation errors."
+  omarchy plugin enable "$plugin_id"
 }

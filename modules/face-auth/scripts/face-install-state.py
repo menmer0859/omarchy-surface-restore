@@ -70,10 +70,15 @@ def begin(path: Path, user: str, packages_present: list[str], backup_id: str, in
     if current and current["status"] != "uninstalled":
         if current.get("user") != user:
             raise ValueError("An active face-auth transaction belongs to a different user")
+        if current["status"] == "uninstalling":
+            raise ValueError("Finish the interrupted uninstall before installing again")
+        current["status"] = "installing"
         current["integrations"] = sorted(set(current.get("integrations", [])) | set(integrations))
         current["updated_at"] = datetime.now(timezone.utc).isoformat()
         _write(path, current)
         return current
+    if current and current["id"] == backup_id:
+        raise ValueError("A new installation must use a new snapshot ID after uninstall")
     current = {
         "schema_version": 1,
         "id": backup_id,
@@ -127,66 +132,76 @@ def _path_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def capture(path: Path, backup_root: Path, target_root: Path) -> dict:
-    state = _read(path)
-    if state is None:
-        raise ValueError("No face-auth transaction record exists")
-    snapshot = backup_root / state["id"]
+def _snapshot_records(snapshot: Path) -> dict[str, set[str]]:
     if snapshot.is_symlink() or not snapshot.is_dir():
         raise ValueError(f"Transaction snapshot is missing or unsafe: {snapshot}")
-    paths: set[str] = set()
+    records = {}
     for filename in (".created_paths", ".backed_up_paths"):
         record = snapshot / filename
-        if not record.exists():
-            continue
         if record.is_symlink() or not record.is_file():
-            raise ValueError(f"Invalid snapshot metadata: {filename}")
+            raise ValueError(f"Missing or invalid snapshot metadata: {filename}")
+        paths = set()
         for raw in record.read_text(encoding="utf-8").splitlines():
             value = PurePosixPath(raw)
             if not value.is_absolute() or value == PurePosixPath("/") or ".." in value.parts:
                 raise ValueError(f"Unsafe path in {filename}: {raw!r}")
             paths.add(str(value))
+        records[filename] = paths
+    return records
+
+
+def _backup_digests(snapshot: Path, paths: set[str]) -> dict[str, str]:
     digests = {}
     for absolute in sorted(paths):
-        relative = Path(*PurePosixPath(absolute).parts[1:])
-        target = target_root / relative
-        digests[absolute] = _path_digest(target)
-    state["installed_hashes"] = digests
+        source = snapshot.joinpath(*PurePosixPath(absolute).parts[1:])
+        digest = _path_digest(source)
+        if digest == "missing":
+            raise ValueError(f"Original backup is missing: {absolute}")
+        digests[absolute] = digest
+    return digests
+
+
+def capture(path: Path, backup_root: Path, target_root: Path) -> dict:
+    state = _read(path)
+    if state is None:
+        raise ValueError("No face-auth transaction record exists")
+    snapshot = backup_root / state["id"]
+    records = _snapshot_records(snapshot)
+    paths = records[".created_paths"] | records[".backed_up_paths"]
+    state["installed_hashes"] = {
+        absolute: _path_digest(target_root.joinpath(*PurePosixPath(absolute).parts[1:]))
+        for absolute in sorted(paths)
+    }
+    state["backup_hashes"] = _backup_digests(snapshot, records[".backed_up_paths"])
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
     _write(path, state)
     return state
 
 
-def verify(path: Path, backup_root: Path, target_root: Path) -> list[str]:
+def verify(path: Path, backup_root: Path, target_root: Path, *, allow_restored: bool = False) -> list[str]:
     state = _read(path)
     if state is None:
         raise ValueError("No face-auth transaction record exists")
     snapshot = backup_root / state["id"]
-    if snapshot.is_symlink() or not snapshot.is_dir():
-        raise ValueError(f"Transaction snapshot is missing or unsafe: {snapshot}")
-    tracked: set[str] = set()
-    for filename in (".created_paths", ".backed_up_paths"):
-        record = snapshot / filename
-        if not record.exists():
-            continue
-        if record.is_symlink() or not record.is_file():
-            raise ValueError(f"Invalid snapshot metadata: {filename}")
-        for raw in record.read_text(encoding="utf-8").splitlines():
-            value = PurePosixPath(raw)
-            if not value.is_absolute() or value == PurePosixPath("/") or ".." in value.parts:
-                raise ValueError(f"Unsafe path in {filename}: {raw!r}")
-            tracked.add(str(value))
+    records = _snapshot_records(snapshot)
+    tracked = records[".created_paths"] | records[".backed_up_paths"]
     expected = state.get("installed_hashes")
     if not isinstance(expected, dict):
         raise ValueError("This install was interrupted before its final state was recorded; automatic uninstall cannot verify which changes are still owned.")
-    unverified = sorted(tracked - set(expected))
-    if unverified:
-        raise ValueError("The install record is incomplete for these paths: " + ", ".join(unverified))
+    if tracked != set(expected):
+        raise ValueError("The snapshot path indexes do not match the completed install record")
+    if state.get("backup_hashes") != _backup_digests(snapshot, records[".backed_up_paths"]):
+        raise ValueError("Original backup integrity check failed; stop and review the protected snapshot")
     changed = []
     for absolute in sorted(tracked):
-        relative = Path(*PurePosixPath(absolute).parts[1:])
-        current = _path_digest(target_root / relative)
-        if current != expected[absolute]:
+        current = _path_digest(target_root.joinpath(*PurePosixPath(absolute).parts[1:]))
+        allowed = {expected[absolute]}
+        if allow_restored:
+            if absolute in records[".created_paths"]:
+                allowed.add("missing")
+            elif absolute in state["backup_hashes"]:
+                allowed.add(state["backup_hashes"][absolute])
+        if current not in allowed:
             changed.append(absolute)
     return changed
 
@@ -207,6 +222,7 @@ def main() -> int:
     snapshot.add_argument("--backup-root", type=Path, default=Path("/var/backups/omarchy-surface-restore"))
     snapshot.add_argument("--target-root", type=Path, default=Path("/"))
     verify_parser = commands.add_parser("verify")
+    verify_parser.add_argument("--allow-restored", action="store_true", help="accept safely restored files when resuming an uninstall")
     verify_parser.add_argument("--backup-root", type=Path, default=Path("/var/backups/omarchy-surface-restore"))
     verify_parser.add_argument("--target-root", type=Path, default=Path("/"))
     commands.add_parser("show")
@@ -230,7 +246,7 @@ def main() -> int:
         elif args.command == "capture":
             state = capture(args.state_file, args.backup_root, args.target_root)
         elif args.command == "verify":
-            conflicts = verify(args.state_file, args.backup_root, args.target_root)
+            conflicts = verify(args.state_file, args.backup_root, args.target_root, allow_restored=args.allow_restored)
             if conflicts:
                 for conflict in conflicts:
                     print(f"Changed since face-auth install: {conflict}")

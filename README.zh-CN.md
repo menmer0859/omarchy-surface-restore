@@ -89,7 +89,19 @@ https://github.com/menmer0859/omarchy-surface-restore
 bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-restore/main/scripts/quick-install.sh) face
 ```
 
-按提示分别选择锁屏、终端 sudo 和图形 Polkit。传入 `--all` 可选择全部功能，也可以组合传入 `--lock --sudo --polkit`。安装副本会保存在 `~/.local/share/omarchy-surface-restore`，下方的一行卸载命令也会使用这个位置。若该位置已有非本项目目录或含有本地修改，启动器会拒绝覆盖。
+按提示分别选择锁屏、终端 sudo 和图形 Polkit。传入 `--all` 可选择全部功能，也可以组合传入 `--lock --sudo --polkit`。安装副本会保存在 `~/.local/share/omarchy-surface-restore`，下方的一行卸载命令也会使用这个位置。已有干净的 `main` 检出会快进更新到远端当前版本；若目录不属于本项目、位于其他分支、含本地修改或本地提交，启动器会停止并请你审查。
+
+请以普通桌面账户运行。启动器需要 `curl` 和 `git`，Howdy 配置还需要 `yay` 或 `paru`，以及 `v4l-utils`。管理员认证、软件包审核、相机选择和人脸录入仍由用户在本机交互完成。
+
+也可以在 Bash 命令末尾直接指定组合：
+
+| 安装范围 | 参数 |
+| :-- | :-- |
+| 分别询问三种入口 | `face` |
+| 仅锁屏 | `face --lock` |
+| 锁屏和终端 sudo | `face --lock --sudo` |
+| 终端 sudo 和图形 Polkit | `face --sudo --polkit` |
+| 全部三种人脸入口 | `face --all` |
 
 如需单独安装触摸屏支持，将 `face` 替换为 `touch`。传入 `all` 可在一次向导中安装两个模块；配置仍彼此独立，卸载人脸认证不会移除触摸支持。
 
@@ -99,7 +111,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-r
 bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
 ```
 
-卸载器恢复有记录的配置，并将新录入的人脸模型归档到受保护备份。它不会移除触摸支持、linux-surface、iptsd 或 Quickshell。没有可信事务记录的旧版安装需要人工审查。
+卸载器先核对安装文件和原始备份的完整性，再恢复有记录的配置。移除图形组件时，桌面必须已解锁，完成后会重新加载 Omarchy shell。新录入的人脸模型会归档到受保护备份。它不会移除触摸支持、linux-surface、iptsd 或 Quickshell。没有可信事务记录的旧版安装需要人工审查。
 
 此启动器通过 HTTPS 使用当前 `main` 分支。若希望先检查源码再运行安装器，请使用下面的手动获取步骤。
 

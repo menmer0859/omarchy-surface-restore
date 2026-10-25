@@ -18,6 +18,7 @@ EXPORT_PATHS = (
     "modules/face-auth/packaging/quickshell-polkit-restart",
     "modules/face-auth/scripts",
     "modules/face-auth/install.sh",
+    "uninstall.sh",
     "lib/common.sh",
     "lib/restore.sh",
 )
@@ -33,7 +34,11 @@ REQUIRED_FILES = (
     "modules/face-auth/scripts/install-lock-face.sh",
     "modules/face-auth/scripts/face-setup-status.py",
     "modules/face-auth/scripts/run-face-setup.sh",
+    "modules/face-auth/scripts/face-install-state.py",
+    "modules/face-auth/scripts/restore-snapshot.py",
+    "modules/face-auth/scripts/uninstall-face-auth.sh",
     "modules/face-auth/install.sh",
+    "uninstall.sh",
     "lib/common.sh",
     "lib/restore.sh",
 )

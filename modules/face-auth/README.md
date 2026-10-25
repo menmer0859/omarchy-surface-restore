@@ -1,11 +1,3 @@
----
-title: "IR Face Authentication for Omarchy"
-type: module-readme
-date: 2026-10-26
-status: active
-canonical_path: "/home/eclipse/Documents/Dev/omarchy-program/omarchy-surface-restore/modules/face-auth/README.md"
----
-
 # IR Face Authentication for Omarchy
 
 This module restores local Howdy face authentication on a supported Surface running Omarchy. It integrates with three independent authentication flows: the Omarchy lock screen, optional terminal sudo, and optional graphical Polkit authorization. Password authentication remains available.
@@ -36,7 +28,7 @@ The exported folder is ready to publish as the root of its own Git repository. O
 
 The installer checks Omarchy, its plugin translation API, stable V4L2 paths and an accessible IR camera. It asks you to identify the camera; it does not guess `/dev/video0`. Review the AUR `howdy-git` transaction. Howdy captures and stores the enrolled face model locally under `/etc/howdy/models/`; the model is never copied into this repository.
 
-After Howdy enrollment, lock-screen face/password integration is installed. On a lit lock screen, manual lock itself does not start the camera; an explicit fresh interaction can request a scan. A confirmed display-off-to-wake or suspend-resume transition waits about 1.5 seconds and requests one scan. Failed attempts do not cause periodic background scanning. Password stays available.
+When selected, lock-screen face/password integration is installed after Howdy enrollment. On a lit lock screen, manual lock itself does not start the camera; an explicit fresh interaction can request a scan. A confirmed display-off-to-wake or suspend-resume transition waits about 1.5 seconds and requests one scan. Failed attempts do not cause periodic background scanning. Password stays available.
 
 ### Optional terminal sudo
 
@@ -65,7 +57,7 @@ For an already configured face setup:
 omarchy restart shell
 ```
 
-This only updates existing managed lock and Polkit UI resources. It does not edit PAM or Howdy, and it does not enroll a model again. The installed plugins are self-contained and do not require the checkout to remain in place.
+This only updates existing managed lock and Polkit UI resources. It does not edit PAM or Howdy, and it does not enroll a model again. The installed plugins are self-contained. A tracked UI upgrade refreshes the installation fingerprints while preserving the original uninstall baseline. Keep the checkout for the documented uninstall command.
 
 The bilingual English/Simplified Chinese interface follows **Omarchy menu → Setup → Language**. The terminal helper reads the standard `~/.config/omarchy/language` preference. Custom XDG config homes are not used by the privileged terminal helper.
 
@@ -85,7 +77,11 @@ Use the one-command uninstaller for a tracked installation:
 ./uninstall.sh face
 ```
 
-It previews the recorded integrations and asks once. Before changing files, the uninstaller compares them with the install-time fingerprints; if a user or another tool changed a managed path later, it stops and lists the conflict so those edits are not overwritten. It restores the exact pre-install files, archives a newly enrolled model in the protected transaction backup by default, and removes Howdy packages only if they were absent before install. Package removal does not cascade; pacman may keep a package if another package now requires it. The uninstaller never removes touchscreen support, linux-surface, iptsd, or Quickshell. It refuses legacy installs without a protected ledger and interrupted installs without a complete fingerprint, rather than inferring ownership from an arbitrary snapshot.
+It previews the recorded integrations and asks once. Original backups and both path indexes are verified before removal. Graphical uninstall requires an unlocked desktop and restarts the Omarchy shell after restoration. Before changing files, the uninstaller compares them with the install-time fingerprints; if a user or another tool changed a managed path later, it stops and lists the conflict so those edits are not overwritten. It restores the exact pre-install files, archives a newly enrolled model in the protected transaction backup by default, and removes Howdy packages only if they were absent before install. Package removal does not cascade; pacman may keep a package if another package now requires it. The uninstaller never removes touchscreen support, linux-surface, iptsd, or Quickshell. It refuses legacy installs without a protected ledger and interrupted installs without a complete fingerprint, rather than inferring ownership from an arbitrary snapshot.
+
+When retrying an interrupted uninstall, only recorded installed content, restored original content, and removed installer-created files are accepted; later edits stop the retry. Ambiguous partial states may require manual recovery. Run one install, UI upgrade, or uninstall operation at a time.
+
+A new transaction preserves its pre-install baseline. Installing over an untracked legacy face setup does not convert that older setup into a clean uninstall baseline; review and remove legacy integrations first if you want complete removal afterward. Other shared package dependencies are retained.
 
 For manual recovery, installers create timestamped backups below `/var/backups/omarchy-surface-restore`. Restore only the face module snapshot when desired:
 

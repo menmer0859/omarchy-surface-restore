@@ -47,7 +47,7 @@ The real-device reference is **Surface Laptop 5 running Omarchy 4.5.0rc1 on Arch
 
 See the [verified setup](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md) for device and runtime details.
 
-Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [current main snapshot a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4). [PR #5](https://github.com/menmer0859/omarchy-surface-restore/pull/5) records the setup-widget changes in the repair branch; [snapshot 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8) contains that implementation. It remains pending integration into `main`.
+Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [main snapshot 7156964](https://github.com/menmer0859/omarchy-surface-restore/commit/7156964aa86aa7f804e4a5048f6cfbcdf9e1df0b). The setup widget is included in `main`; its standalone repository and catalog listing remain unpublished.
 
 ## Install with your agent
 
@@ -94,7 +94,19 @@ On the Surface, run this command to fetch a clean project checkout and start the
 bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-restore/main/scripts/quick-install.sh) face
 ```
 
-Choose lock screen, terminal sudo, and graphical Polkit separately when prompted. Add `--all` to select all three, or pass any combination of `--lock --sudo --polkit`. The installer keeps its checkout at `~/.local/share/omarchy-surface-restore`, which is also used by the one-line uninstaller below. The bootstrap refuses to overwrite an unrelated or locally modified checkout.
+Choose lock screen, terminal sudo, and graphical Polkit separately when prompted. Add `--all` to select all three, or pass any combination of `--lock --sudo --polkit`. The installer keeps its checkout at `~/.local/share/omarchy-surface-restore`, which is also used by the one-line uninstaller below. A clean existing checkout on `main` is fast-forwarded to the current remote version. An unrelated checkout, another branch, local edits, or local commits stops the bootstrap for review.
+
+Run as your normal desktop account. The bootstrap needs `curl` and `git`; Howdy setup also needs `yay` or `paru` and `v4l-utils`. Administrator authentication, package review, camera selection, and enrollment remain interactive.
+
+For explicit selection, append these arguments to the Bash command:
+
+| Selection | Arguments |
+| :-- | :-- |
+| Ask about each integration | `face` |
+| Lock screen only | `face --lock` |
+| Lock screen and terminal sudo | `face --lock --sudo` |
+| Terminal sudo and graphical Polkit | `face --sudo --polkit` |
+| All three face integrations | `face --all` |
 
 To install touchscreen support instead, replace `face` with `touch`. Use `all` to install both modules in one guided run; their configuration remains independent, and removing face authentication does not remove touch support.
 
@@ -104,7 +116,7 @@ After a tracked face-auth install, remove its integrations with one command:
 bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
 ```
 
-The uninstaller restores recorded configuration and archives a newly enrolled model in the protected backup. It does not remove touchscreen support, linux-surface, iptsd, or Quickshell. Legacy installations without a trusted transaction record require manual review.
+The uninstaller verifies both installed files and the protected original backups before restoring configuration. Graphical removal requires an unlocked desktop and reloads the Omarchy shell. It archives a newly enrolled model in the protected backup. It does not remove touchscreen support, linux-surface, iptsd, or Quickshell. Legacy installations without a trusted transaction record require manual review.
 
 The bootstrap uses the current `main` branch over HTTPS. To inspect the checkout before running its installer, use the manual steps below.
 
