@@ -7,7 +7,7 @@ See [local acceptance fixes, installation and retest](local-acceptance-fixes.md)
 ## Omarchy integration
 
 - User plugin clones, schemaVersion 1, service entry points, `keepLoaded` and `omarchy.clonedFrom` preserve Omarchy's authentication service lifecycle and capability boundaries. No changes to `/usr/share/omarchy`.
-- Requires the installed shell's `Commons.Translations` API. The current real-device baseline is Omarchy 4.5.0rc1 with the local Quickshell update `0.3.2.r7.g2b4501a-2`. This is an API prerequisite, not a claim that every Omarchy release is compatible. Installers reject a missing API before mutation.
+- Requires the installed shell's `Commons.Translations` API. The current real-device baseline is Omarchy 4.5.0rc1 with the corrected local Quickshell package `0.3.2.r7.g2b4501a-3.1`. The earlier `-2` build omitted Omarchy's Qt 6.12 theme-loader compatibility; see the [repair record](quickshell-color-compat-fix.md). This is an API prerequisite, not a claim that every Omarchy release is compatible. Installers reject a missing API before mutation.
 - Shared QML source lives in `modules/face-auth/assets/face-ui`; each deployed plugin receives its own regular files under `FaceUi/` and flat JSON catalogs in `i18n/`. Development symlinks are dereferenced by the resource deployer; no installed component depends on the repository remaining in place.
 - No new lock engine, compositor patch, recognition model or authorization policy. Terminal sudo, graphical Polkit and screen unlock remain distinct PAM consumers.
 

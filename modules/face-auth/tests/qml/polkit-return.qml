@@ -1,3 +1,4 @@
+//@ pragma OmarchyLoadPatch
 import QtQuick
 import QtQuick.Window
 import Quickshell

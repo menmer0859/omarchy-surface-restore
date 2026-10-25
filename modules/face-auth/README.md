@@ -52,6 +52,8 @@ The bilingual English/Simplified Chinese interface follows **Omarchy menu → Se
 
 Graphical return-to-face uses `AuthFlow.restartAuthentication()`. The pinned recipe and patches are under [`packaging/quickshell-polkit-restart`](packaging/quickshell-polkit-restart/README.md). The recipe targets the tested Quickshell source revision and must not blindly downgrade a newer system package. Old runtimes keep password authentication and hide unsupported return behavior.
 
+On Qt 6.12 this build must also retain Omarchy's theme-loader compatibility patch. The corrected local package is `0.3.2.r7.g2b4501a-3.1`; the earlier `-2` package omitted that patch and can render other plugins' theme colors incorrectly.
+
 ## Verify and recover
 
 Test in this order: lock-screen password fallback; lock → password → return to face picker → explicit face; `sudo -k -v` with n then y; `pkexec /usr/bin/id` with password, return, face, and cancel. Then test one real graphical administrator action. Polkit may cache authorization, so a command may not prompt every time.

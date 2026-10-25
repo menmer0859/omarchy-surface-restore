@@ -52,6 +52,8 @@ omarchy restart shell
 
 图形界面“返回人脸”依赖 `AuthFlow.restartAuthentication()`。指定版本配方和补丁在 [`packaging/quickshell-polkit-restart`](packaging/quickshell-polkit-restart/README.md)。它针对已验证的 Quickshell 源码版本，不能盲目降级较新的系统包。旧运行时仍保留密码验证，并隐藏当前不支持的返回操作。
 
+Qt 6.12 下重新打包还必须保留 Omarchy 的主题加载兼容补丁。修正后的本地包为 `0.3.2.r7.g2b4501a-3.1`；此前的 `-2` 漏带该补丁，会导致其他插件的主题颜色异常。
+
 ## 验收与恢复
 
 建议顺序：先验证锁屏密码兜底；锁屏后测试“密码 → 返回人脸选择 → 明确选择人脸”；再用 `sudo -k -v` 分别测试 n 和 y；用 `pkexec /usr/bin/id` 测试密码、人脸返回和取消；最后选一个真实图形管理员操作。Polkit 可能缓存授权，因此命令不一定每次都弹出提示。
