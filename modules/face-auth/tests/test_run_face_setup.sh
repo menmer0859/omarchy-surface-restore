@@ -12,6 +12,9 @@ new_fixture() {
   local root="$1"
   mkdir -p "$root/modules/face-auth/scripts"
   cp "$repo_root/modules/face-auth/scripts/run-face-setup.sh" "$root/modules/face-auth/scripts/"
+  cp "$repo_root/modules/face-auth/scripts/face-install-state.py" "$root/modules/face-auth/scripts/"
+  mkdir -p "$root/lib"
+  cp "$repo_root/lib/common.sh" "$root/lib/"
   cat > "$root/modules/face-auth/scripts/face-setup-status.py" <<'PY'
 import json, os
 from pathlib import Path
@@ -54,15 +57,39 @@ run_case() {
   local label="$1" selection="$2" initial="$3" expected_rc="$4" expected_log="$5" fail_at="${6:-}"
   local root="$temp/$label" state="$temp/$label.state" log="$temp/$label.log"
   new_fixture "$root"
+  mkdir -p "$temp/$label.backups/$label"
+  : > "$temp/$label.backups/$label/.created_paths"
+  : > "$temp/$label.backups/$label/.backed_up_paths"
+  mkdir -p "$root/bin"
+  cat > "$root/bin/sudo" <<'SUDO'
+#!/usr/bin/env bash
+exec "$@"
+SUDO
+  cat > "$root/bin/pacman" <<'PACMAN'
+#!/usr/bin/env bash
+[[ "$1" == '-Qq' ]] && exit 1
+exit 2
+PACMAN
+  chmod +x "$root/bin/sudo" "$root/bin/pacman"
   printf '%s\n' "$initial" > "$state"
   : > "$log"
   set +e
   # shellcheck disable=SC2086
-  TEST_STATE_FILE="$state" TEST_LOG="$log" FAIL_AT="$fail_at" bash "$root/modules/face-auth/scripts/run-face-setup.sh" $selection >"$temp/$label.out" 2>&1
+  TEST_STATE_FILE="$state" TEST_LOG="$log" FAIL_AT="$fail_at" PATH="$root/bin:$PATH" USER=test-user SURFACE_SETUP_TESTING=1 \
+    SURFACE_SETUP_FACE_STATE_FILE="$temp/$label.ledger" SURFACE_SETUP_BACKUP_ROOT="$temp/$label.backups" \
+    SURFACE_SETUP_BACKUP_ID="$label" SURFACE_SETUP_TARGET_ROOT="$root" \
+    bash "$root/modules/face-auth/scripts/run-face-setup.sh" $selection >"$temp/$label.out" 2>&1
   local rc=$?
   set -e
   assert_eq "$rc" "$expected_rc" "$label exit code"
   assert_eq "$(tr '\n' ' ' < "$log" | sed 's/ $//')" "$expected_log" "$label sequence"
+  if [[ -n $selection && $label != no-camera ]]; then
+    local ledger="$temp/$label.ledger"
+    [[ -s "$ledger" ]] || fail "$label did not create the transaction ledger before setup"
+    local expected_status=installing
+    [[ $expected_rc -eq 0 ]] && expected_status=installed
+    assert_eq "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$ledger")" "$expected_status" "$label ledger status"
+  fi
 }
 
 run_case no-selection "" "camera=1 howdy=0 lock=0 password=1 sudo=0 polkit=0" 2 ""

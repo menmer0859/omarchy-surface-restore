@@ -1,3 +1,11 @@
+---
+title: "IR Face Authentication for Omarchy"
+type: module-readme
+date: 2026-10-26
+status: active
+canonical_path: "/home/eclipse/Documents/Dev/omarchy-program/omarchy-surface-restore/modules/face-auth/README.md"
+---
+
 # IR Face Authentication for Omarchy
 
 This module restores local Howdy face authentication on a supported Surface running Omarchy. It integrates with three independent authentication flows: the Omarchy lock screen, optional terminal sudo, and optional graphical Polkit authorization. Password authentication remains available.
@@ -12,6 +20,8 @@ From the repository root:
 ./install.sh check
 ./install.sh face
 ```
+
+`./install.sh face` offers one guided transaction for the lock screen, terminal sudo, and graphical Polkit. Use `./install.sh face --all` to choose all three in one run, or specify any combination of `--lock --sudo --polkit`. Howdy is installed/enrolled once and shared by the selected integrations.
 
 ### Guided setup panel
 
@@ -69,7 +79,15 @@ On Qt 6.12 this build must also retain Omarchy's theme-loader compatibility patc
 
 Test in this order: lock-screen password fallback; lock → password → return to face picker → explicit face; `sudo -k -v` with n then y; `pkexec /usr/bin/id` with password, return, face, and cancel. Then test one real graphical administrator action. Polkit may cache authorization, so a command may not prompt every time.
 
-Installers create timestamped backups below `/var/backups/omarchy-surface-restore`. Restore only the face module snapshot when desired:
+Use the one-command uninstaller for a tracked installation:
+
+```bash
+./uninstall.sh face
+```
+
+It previews the recorded integrations and asks once. Before changing files, the uninstaller compares them with the install-time fingerprints; if a user or another tool changed a managed path later, it stops and lists the conflict so those edits are not overwritten. It restores the exact pre-install files, archives a newly enrolled model in the protected transaction backup by default, and removes Howdy packages only if they were absent before install. Package removal does not cascade; pacman may keep a package if another package now requires it. The uninstaller never removes touchscreen support, linux-surface, iptsd, or Quickshell. It refuses legacy installs without a protected ledger and interrupted installs without a complete fingerprint, rather than inferring ownership from an arbitrary snapshot.
+
+For manual recovery, installers create timestamped backups below `/var/backups/omarchy-surface-restore`. Restore only the face module snapshot when desired:
 
 ```bash
 ./scripts/restore.sh --module face-auth

@@ -1,7 +1,7 @@
 ---
 title: "Omarchy Surface Restore"
 type: project-readme
-date: 2026-10-25
+date: 2026-10-26
 status: reviewed
 canonical_path: "https://github.com/menmer0859/omarchy-surface-restore/blob/main/README.md"
 ---
@@ -55,7 +55,7 @@ The real-device reference is **Surface Laptop 5 running Omarchy 4.5.0rc1 on Arch
 
 See the [verified setup](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md) for device and runtime details.
 
-Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [current main snapshot a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4). The setup-widget implementation is recorded in [source snapshot 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8); its source is now included in `main`, while standalone plugin publication remains pending.
+Evidence: [verified device record](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md), [behavior contract](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md), and [current main snapshot a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4). [PR #5](https://github.com/menmer0859/omarchy-surface-restore/pull/5) records the setup-widget changes in the repair branch; [snapshot 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8) contains that implementation. It remains pending integration into `main`.
 
 ## Install with your agent
 
@@ -94,6 +94,28 @@ unverified, and how to recover the previous configuration.
 
 ## Quick start
 
+### One-line Bash installation
+
+On the Surface, run this command to fetch a clean project checkout and start the guided installer:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-restore/main/scripts/quick-install.sh) face
+```
+
+Choose lock screen, terminal sudo, and graphical Polkit separately when prompted. Add `--all` to select all three, or pass any combination of `--lock --sudo --polkit`. The installer keeps its checkout at `~/.local/share/omarchy-surface-restore`, which is also used by the one-line uninstaller below. The bootstrap refuses to overwrite an unrelated or locally modified checkout.
+
+To install touchscreen support instead, replace `face` with `touch`. To install both modules, run the face command first and then the touch command; they remain independently removable.
+
+After a tracked face-auth install, remove its integrations with one command:
+
+```bash
+bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
+```
+
+The uninstaller restores recorded configuration and archives a newly enrolled model in the protected backup. It does not remove touchscreen support, linux-surface, iptsd, or Quickshell. Legacy installations without a trusted transaction record require manual review.
+
+The bootstrap uses the current `main` branch over HTTPS. For a manually reviewed or pinned source, use the clone-and-check steps below instead.
+
 **1 · Get the source and check your device.**
 
 ```bash
@@ -108,16 +130,16 @@ git clone https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.loca
 "$HOME/.local/share/omarchy-surface-restore/install.sh"
 ```
 
-Face setup needs an AUR helper (`yay` or `paru`). It asks you to select the IR camera, review the Howdy package, and enroll your face locally. Touch setup installs the linux-surface kernel, headers, and iptsd; reboot into that kernel afterward.
+Face setup is one transaction: `./install.sh face` asks which integrations to install (lock screen, terminal sudo, graphical Polkit); `./install.sh face --all` selects all three, or pass any combination of `--lock --sudo --polkit`. It asks you to select the IR camera, review the Howdy package, and enroll your face locally. Touch setup remains a separate module and installs the linux-surface kernel, headers, and iptsd; reboot into that kernel afterward.
 
-**3 · Verify password fallback, then face authentication.** For face setup, test the lock screen first. Enable terminal and app authorization separately when you want them:
+**3 · Verify password fallback, then face authentication.** Test the lock screen first, then the selected sudo and Polkit paths:
 
 ```bash
-"$HOME/.local/share/omarchy-surface-restore/install.sh" sudo-face    # Optional terminal sudo integration
-"$HOME/.local/share/omarchy-surface-restore/install.sh" polkit-face  # Optional graphical administrator prompts
 sudo -k -v               # Test terminal authentication: try n, then y
 pkexec /usr/bin/id       # Test a graphical Polkit request
 ```
+
+To remove the tracked face setup in one step, run `"$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face`. It previews the tracked integrations, asks once, restores recorded files, and archives a newly enrolled model under `/var/backups/omarchy-surface-restore/`. It does not remove touchscreen support, linux-surface, iptsd, or Quickshell. Installs made before transaction tracking was added are not guessed or automatically removed.
 
 <sub>Prefer direct commands? Use <code>"$HOME/.local/share/omarchy-surface-restore/install.sh" face</code> or <code>"$HOME/.local/share/omarchy-surface-restore/install.sh" touch</code>. Installation and recovery details: <a href="https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/README.md">face authentication</a> · <a href="https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/touch/README.md">touchscreen</a>.</sub>
 
@@ -158,7 +180,7 @@ The touch module installs the upstream linux-surface kernel, matching headers, a
 
 A bilingual setup widget checks readiness and lets you select lock screen, sudo, and Polkit independently. Its checks inspect configuration without starting the camera.
 
-The standalone plugin export is now included in `main` and remains locally validated. **There is still no published `omarchy plugin add` URL:** the companion plugin repository and catalog listing are follow-up work. Use the source installer above; see the [distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) for current publishing status.
+The bilingual setup widget and its standalone export are included in `main`. **There is still no published `omarchy plugin add` URL:** the companion plugin repository and catalog listing remain separate follow-up work. Use the source installer above; see the [distribution guide](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) for the current status.
 
 <details>
 <summary>For maintainers: build and validate the plugin export</summary>
@@ -198,6 +220,8 @@ Keep a working terminal open while changing authentication settings. To review f
 
 Restore recovers saved configuration; it does not remove packages or downgrade kernels or Quickshell. Removing the setup widget alone also leaves system authentication configuration installed.
 
+For a Bash-installed face-auth transaction, use the one-command uninstaller described in Quick start. It removes only recorded face-auth changes and retains a newly enrolled model in the protected backup.
+
 ## Contributing
 
 Report reproducible problems through [GitHub Issues](https://github.com/menmer0859/omarchy-surface-restore/issues). Include the Surface model, Omarchy and Quickshell versions, affected authentication path, and redacted diagnostics. For another Surface model, both success reports and precise failure reports help improve the compatibility record.
@@ -213,7 +237,7 @@ Built on [linux-surface](https://github.com/linux-surface/linux-surface), [Howdy
 | [Face authentication](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/README.md) | Installation, optional integrations, upgrades, and recovery |
 | [Touchscreen](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/touch/README.md) | Kernel installation, reboot verification, and recovery |
 | [Plugin behavior](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md) | Lock/wake rules, UI interactions, languages, and known limits |
-| [Plugin distribution](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) | Standalone export and publishing status |
+| [Plugin distribution](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) | Standalone export and publishing status |
 | [Local acceptance](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/local-acceptance-fixes.md) | Previously fixed issues and manual retest scenarios |
 | [Quickshell packaging](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/packaging/quickshell-polkit-restart/README.md) | Return-to-face support and the compatible runtime build |
 

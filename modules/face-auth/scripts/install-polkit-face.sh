@@ -6,7 +6,7 @@ root=$(cd "$module_root/../.." && pwd)
 source "$root/lib/common.sh"
 require_omarchy
 require_face_ui_api
-require_commands sudo python3 install cc pkg-config omarchy jq readlink systemctl
+require_commands sudo python3 install cc pkg-config omarchy omarchy-shell jq readlink systemctl
 
 service=/etc/pam.d/polkit-1
 vendor_service=/usr/lib/pam.d/polkit-1
@@ -87,6 +87,8 @@ from pathlib import Path
 
 plugins, allowed = map(Path, sys.argv[1:])
 for manifest in plugins.glob("*/manifest.json"):
+    if manifest.parent.name.startswith("."):
+        continue
     if manifest.parent == allowed:
         continue
     try:
@@ -134,7 +136,10 @@ else
   mark_new_path "$device_dropin"
 fi
 
+shell_config="$HOME/.config/omarchy/shell.json"
+if [[ -e "$shell_config" ]]; then backup_and_report "$shell_config"; else mark_new_path "$shell_config"; fi
 if [[ ! -d "$plugin_root" ]]; then
+  mark_new_path "$plugin_root"
   mark_new_path "$plugin_manifest"
   mark_new_path "$plugin_qml"
   mark_new_path "$plugin_model"
@@ -163,6 +168,7 @@ data["version"] = "2.1.0"
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 omarchy-shell shell rescanPlugins >/dev/null
+omarchy plugin enable "$clone_user.polkit"
 
 if [[ ! -e "$service" ]]; then
   sudo install -D -o root -g root -m 0644 "$vendor_service" "$service"

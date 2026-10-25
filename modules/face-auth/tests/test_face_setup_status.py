@@ -38,6 +38,9 @@ class FaceSetupStatusTests(unittest.TestCase):
         self._touch("etc/systemd/system/polkit-agent-helper@.service.d/60-omarchy-surface-face.conf")
         self._touch("etc/systemd/system/quickshell.service.d/90-polkit-camera.conf")
         plugins = self.home / ".config/omarchy/plugins"
+        shell_config = self.home / ".config/omarchy/shell.json"
+        shell_config.parent.mkdir(parents=True, exist_ok=True)
+        shell_config.write_text(json.dumps({"plugins": ["surface.lock", "alice.polkit"]}), encoding="utf-8")
         (plugins / "surface.lock").mkdir(parents=True)
         (plugins / "surface.lock/manifest.json").write_text(json.dumps({
             "id": "surface.lock", "omarchy": {"clonedFrom": "omarchy.lock"}
@@ -106,6 +109,24 @@ class FaceSetupStatusTests(unittest.TestCase):
         result = self._collect()
         self.assertTrue(result["lock"]["conflict"])
         self.assertFalse(result["lock"]["ready"])
+
+    def test_hidden_omarchy_backup_is_ignored_for_clone_conflicts(self):
+        plugin = self.home / ".config/omarchy/plugins/.old-lock.bak.20261026"
+        plugin.mkdir()
+        (plugin / "manifest.json").write_text(json.dumps({
+            "id": "old-lock", "omarchy": {"clonedFrom": "omarchy.lock"}
+        }), encoding="utf-8")
+        result = self._collect()
+        self.assertFalse(result["lock"]["conflict"])
+
+    def test_disabled_installed_plugins_are_not_reported_ready(self):
+        (self.home / ".config/omarchy/shell.json").write_text('{"plugins": []}', encoding="utf-8")
+        result = self._collect()
+        self.assertTrue(result["lock"]["pluginInstalled"])
+        self.assertFalse(result["lock"]["pluginEnabled"])
+        self.assertFalse(result["lock"]["ready"])
+        self.assertFalse(result["polkit"]["pluginEnabled"])
+        self.assertFalse(result["polkit"]["ready"])
 
     def test_authentication_enabled_without_camera_access_is_not_ready(self):
         with patch.object(status_module.os, "access", return_value=False):

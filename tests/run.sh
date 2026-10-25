@@ -21,6 +21,7 @@ python3 -m py_compile modules/face-auth/scripts/render-polkit-device-access.py
 python3 -m py_compile modules/face-auth/scripts/check-lock-plugin-clones.py
 python3 -m py_compile modules/face-auth/scripts/omarchy-polkit-howdy.py modules/face-auth/scripts/omarchy-face-auth-locale modules/face-auth/scripts/deploy-face-ui.py
 python3 -m py_compile modules/face-auth/scripts/export-setup-plugin.py modules/face-auth/scripts/face-setup-status.py
+python3 -m py_compile modules/face-auth/scripts/face-install-state.py modules/face-auth/scripts/restore-snapshot.py
 
 module_dir=$(mktemp -d)
 trap 'rm -rf -- "$module_dir"' EXIT
@@ -34,8 +35,11 @@ bash modules/touch/tests/test-isolation.sh
 bash tests/test_restore_created_paths.sh
 bash tests/test_module_restore_isolation.sh
 bash modules/face-auth/tests/test_run_face_setup.sh
+bash modules/face-auth/tests/test_face_uninstall.sh
+bash tests/test_quick_install.sh
 bash modules/face-auth/tests/test_face_setup_distribution.sh
 python3 -m unittest discover -s modules/face-auth/tests -p 'test_*.py'
+python3 -m unittest tests/test_restore_snapshot.py
 
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck install.sh scripts/*.sh lib/*.sh modules/face-auth/install.sh modules/face-auth/scripts/*.sh modules/touch/install.sh modules/touch/tests/*.sh tests/*.sh modules/face-auth/tests/*.sh

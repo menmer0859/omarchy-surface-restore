@@ -1,3 +1,11 @@
+---
+title: "Omarchy 红外人脸识别模块"
+type: module-readme
+date: 2026-10-26
+status: active
+canonical_path: "/home/eclipse/Documents/Dev/omarchy-program/omarchy-surface-restore/modules/face-auth/README.zh-CN.md"
+---
+
 # Omarchy 红外人脸识别模块
 
 本模块为受支持的 Surface + Omarchy 恢复本地 Howdy 人脸识别，并分别接入锁屏、可选的终端 sudo 和可选的图形 Polkit 授权。密码仍然可用。
@@ -12,6 +20,8 @@
 ./install.sh check
 ./install.sh face
 ```
+
+`./install.sh face` 会在一次向导中配置锁屏、终端 sudo 和图形 Polkit。使用 `./install.sh face --all` 可在一次运行中选择全部功能，也可组合传入 `--lock --sudo --polkit`。Howdy 只安装和录入一次，供选中的功能共用。
 
 ### 引导式配置面板
 
@@ -69,7 +79,15 @@ Qt 6.12 下重新打包还必须保留 Omarchy 的主题加载兼容补丁。修
 
 建议顺序：先验证锁屏密码兜底；锁屏后测试“密码 → 返回人脸选择 → 明确选择人脸”；再用 `sudo -k -v` 分别测试 n 和 y；用 `pkexec /usr/bin/id` 测试密码、人脸返回和取消；最后选一个真实图形管理员操作。Polkit 可能缓存授权，因此命令不一定每次都弹出提示。
 
-安装器把时间戳备份存放在 `/var/backups/omarchy-surface-restore`。只恢复人脸模块时：
+有事务记录的安装可用一条命令卸载：
+
+```bash
+./uninstall.sh face
+```
+
+卸载器会预览记录中的功能并只询问一次。修改文件前会核对安装时保存的指纹；如果用户或其他工具后来改过受管路径，卸载会停止并列出冲突，避免覆盖这些改动。随后恢复安装前文件；新录入的人脸模型默认保留在受保护的事务备份中。只有安装前不存在的 Howdy 软件包才会被尝试移除，且不级联删除；如果其他软件现在依赖该包，pacman 会拒绝移除并保留它。人脸卸载不会移除触摸功能、linux-surface、iptsd 或 Quickshell。没有受保护事务记录的旧安装，或没有完整指纹的中断安装，会被拒绝自动卸载，不会通过旧快照猜测文件归属。
+
+手动恢复时，安装器会将时间戳备份存放在 `/var/backups/omarchy-surface-restore`。只恢复人脸模块时：
 
 ```bash
 ./scripts/restore.sh --module face-auth

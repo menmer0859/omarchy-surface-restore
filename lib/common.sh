@@ -2,7 +2,12 @@
 
 set -euo pipefail
 
-SURFACE_SETUP_BACKUP_ROOT=${SURFACE_SETUP_BACKUP_ROOT:-/var/backups/omarchy-surface-restore}
+if [[ ${SURFACE_SETUP_TESTING:-0} == 1 ]]; then
+  SURFACE_SETUP_BACKUP_ROOT=${SURFACE_SETUP_BACKUP_ROOT:-/tmp/omarchy-surface-restore-test-backups}
+  [[ "$SURFACE_SETUP_BACKUP_ROOT" == /tmp/* ]] || { printf 'Isolated test backup roots must be inside /tmp.\n' >&2; exit 1; }
+else
+  SURFACE_SETUP_BACKUP_ROOT=/var/backups/omarchy-surface-restore
+fi
 SURFACE_SETUP_BACKUP_ID=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)}
 export SURFACE_SETUP_BACKUP_ROOT SURFACE_SETUP_BACKUP_ID SURFACE_SETUP_MODULE
 
@@ -48,6 +53,7 @@ backup_path() {
   record_snapshot_module
 
   if [[ -e "$target" || -L "$target" ]]; then
+    record_snapshot_path .backed_up_paths "$source_path"
     printf '%s\n' "$target"
     return 0
   fi
@@ -61,7 +67,30 @@ backup_path() {
     sudo cp -a --parents -- "$source_path" "$snapshot"
   fi
 
+  record_snapshot_path .backed_up_paths "$source_path"
   printf '%s\n' "$target"
+}
+
+record_snapshot_path() {
+  local record_name=${1:?Usage: record_snapshot_path RECORD PATH}
+  local path=${2:?Usage: record_snapshot_path RECORD PATH}
+  local snapshot="$SURFACE_SETUP_BACKUP_ROOT/$SURFACE_SETUP_BACKUP_ID"
+  local record="$snapshot/$record_name"
+  [[ "$path" == /* && "$path" != / && "$path" != *$'\n'* ]] \
+    || die "Refusing to record an unsafe snapshot path: $path"
+
+  if [[ -w "$SURFACE_SETUP_BACKUP_ROOT" || -w "$(dirname "$SURFACE_SETUP_BACKUP_ROOT")" ]]; then
+    mkdir -p "$snapshot"
+    touch "$record"
+    grep -Fxq -- "$path" "$record" || printf '%s\n' "$path" >> "$record"
+  else
+    command -v sudo >/dev/null 2>&1 || die 'sudo is required to record a system snapshot path'
+    sudo install -d -m 0700 "$snapshot"
+    if ! sudo grep -Fxq -- "$path" "$record" 2>/dev/null; then
+      printf '%s\n' "$path" | sudo tee -a "$record" >/dev/null
+      sudo chmod 0600 "$record"
+    fi
+  fi
 }
 
 mark_new_path() {
@@ -70,11 +99,15 @@ mark_new_path() {
   record_snapshot_module
   if [[ -w "$SURFACE_SETUP_BACKUP_ROOT" || -w "$(dirname "$SURFACE_SETUP_BACKUP_ROOT")" ]]; then
     mkdir -p "$snapshot"
-    printf '%s\n' "$new_path" >> "$snapshot/.created_paths"
+    touch "$snapshot/.created_paths"
+    grep -Fxq -- "$new_path" "$snapshot/.created_paths" || printf '%s\n' "$new_path" >> "$snapshot/.created_paths"
   else
     command -v sudo >/dev/null 2>&1 || die 'sudo is required to record a newly created system path'
     sudo install -d -m 0700 "$snapshot"
-    printf '%s\n' "$new_path" | sudo tee -a "$snapshot/.created_paths" >/dev/null
+    if ! sudo grep -Fxq -- "$new_path" "$snapshot/.created_paths" 2>/dev/null; then
+      printf '%s\n' "$new_path" | sudo tee -a "$snapshot/.created_paths" >/dev/null
+      sudo chmod 0600 "$snapshot/.created_paths"
+    fi
   fi
   info "Recorded new path for restore: $new_path"
 }
@@ -119,4 +152,50 @@ install_face_ui_resources() {
     [[ -e "$target/$relative" ]] || mark_new_path "$target/$relative"
   done < <(python3 "$root/modules/face-auth/scripts/deploy-face-ui.py" "$kind" "$target" --list)
   python3 "$root/modules/face-auth/scripts/deploy-face-ui.py" "$kind" "$target"
+}
+
+# Create one protected face-auth ledger before the first system mutation. A
+# subsequent invocation reuses its ID and original package baseline.
+begin_face_transaction() {
+  local face_root
+  local state_file=/var/lib/omarchy-surface-restore/face-auth.json
+  [[ ${SURFACE_SETUP_TESTING:-0} == 1 ]] && state_file=${SURFACE_SETUP_FACE_STATE_FILE:-$state_file}
+  face_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  local state_script="$face_root/modules/face-auth/scripts/face-install-state.py"
+  local integration backup_id package
+  local -a arguments=()
+  (($# > 0)) || die 'At least one face-auth integration must be selected.'
+  require_commands pacman sudo python3
+  backup_id=${SURFACE_SETUP_BACKUP_ID:-$(date +%Y%m%d-%H%M%S)-face-auth}
+  arguments=(--state-file "$state_file" begin --user "${USER:?USER is required}" --backup-id "$backup_id")
+  for integration in "$@"; do arguments+=(--integration "$integration"); done
+  for package in howdy-git python-dlib-git; do
+    if pacman -Qq "$package" >/dev/null 2>&1; then arguments+=(--package-present "$package"); fi
+  done
+  SURFACE_SETUP_BACKUP_ID=$(sudo python3 "$state_script" "${arguments[@]}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])') \
+    || die 'Could not create or read the protected face-auth install record.'
+  export SURFACE_SETUP_BACKUP_ID SURFACE_SETUP_FACE_STATE_FILE="$state_file"
+}
+
+set_face_transaction_status() {
+  local status=${1:?Usage: set_face_transaction_status STATUS}
+  local face_root
+  local state_file=/var/lib/omarchy-surface-restore/face-auth.json
+  [[ ${SURFACE_SETUP_TESTING:-0} == 1 ]] && state_file=${SURFACE_SETUP_FACE_STATE_FILE:-$state_file}
+  face_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  sudo python3 "$face_root/modules/face-auth/scripts/face-install-state.py" --state-file "$state_file" status "$status" >/dev/null
+}
+
+capture_face_transaction() {
+  local face_root state_file backup_root target_root=/
+  face_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  state_file=/var/lib/omarchy-surface-restore/face-auth.json
+  backup_root=/var/backups/omarchy-surface-restore
+  if [[ ${SURFACE_SETUP_TESTING:-0} == 1 ]]; then
+    state_file=${SURFACE_SETUP_FACE_STATE_FILE:-$state_file}
+    backup_root=${SURFACE_SETUP_BACKUP_ROOT:-$backup_root}
+    target_root=${SURFACE_SETUP_TARGET_ROOT:-$target_root}
+  fi
+  sudo python3 "$face_root/modules/face-auth/scripts/face-install-state.py" --state-file "$state_file" \
+    capture --backup-root "$backup_root" --target-root "$target_root" >/dev/null
 }

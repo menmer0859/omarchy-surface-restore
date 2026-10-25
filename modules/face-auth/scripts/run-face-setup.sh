@@ -6,14 +6,15 @@ status_script="$module_root/scripts/face-setup-status.py"
 selected_lock=false
 selected_sudo=false
 selected_polkit=false
+repo_root=$(cd "$module_root/../.." && pwd)
+source "$repo_root/lib/common.sh"
 
 usage() {
   cat >&2 <<'USAGE'
 Usage: run-face-setup.sh [--lock] [--sudo] [--polkit]
 
-Select at least one integration. Howdy is installed/enrolled only when it is
-not already ready. The base Howdy setup does not configure lock, sudo, or
-Polkit authentication; each selected integration is installed separately.
+Select the integrations in this single guided install. Howdy is installed and
+enrolled once when needed; password authentication remains available.
 USAGE
 }
 
@@ -27,6 +28,13 @@ while (($#)); do
   esac
   shift
 done
+
+if [[ "$selected_lock" != true && "$selected_sudo" != true && "$selected_polkit" != true ]]; then
+  printf 'Choose face-authentication integrations to install in this run.\n'
+  ask_yes_no 'Install lock-screen face authentication?' && selected_lock=true || true
+  ask_yes_no 'Install consent-gated terminal sudo face authentication?' && selected_sudo=true || true
+  ask_yes_no 'Install consent-gated graphical Polkit face authentication?' && selected_polkit=true || true
+fi
 
 if [[ "$selected_lock" != true && "$selected_sudo" != true && "$selected_polkit" != true ]]; then
   usage
@@ -59,6 +67,12 @@ if ! status_true "$status_json" camera.available || ! status_true "$status_json"
   exit 1
 fi
 
+integrations=()
+[[ "$selected_lock" == true ]] && integrations+=(lock)
+[[ "$selected_sudo" == true ]] && integrations+=(sudo)
+[[ "$selected_polkit" == true ]] && integrations+=(polkit)
+begin_face_transaction "${integrations[@]}"
+
 if ! status_true "$status_json" howdy.ready; then
   bash "$module_root/scripts/install-howdy-base.sh"
   status_json=$(read_status) || { echo 'Could not verify the Howdy installation.' >&2; exit 1; }
@@ -88,3 +102,5 @@ if [[ "$selected_polkit" == true ]]; then
 fi
 
 printf 'Selected face authentication integrations passed the final readiness check. Password fallback remains available.\n'
+capture_face_transaction
+set_face_transaction_status installed

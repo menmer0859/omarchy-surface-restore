@@ -1,7 +1,7 @@
 ---
 title: "Omarchy Surface Restore — 简体中文"
 type: project-readme
-date: 2026-10-25
+date: 2026-10-26
 status: reviewed
 canonical_path: "https://github.com/menmer0859/omarchy-surface-restore/blob/main/README.zh-CN.md"
 ---
@@ -55,7 +55,7 @@ canonical_path: "https://github.com/menmer0859/omarchy-surface-restore/blob/main
 
 设备与运行时细节见[已验证配置记录（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md)。
 
-证据来源：[已验证设备记录（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md)、[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)及[当前主分支快照 a0a55d1](https://github.com/menmer0859/omarchy-surface-restore/commit/a0a55d12ae91e6131a4a91020e023cea784f89a4)。[PR #5](https://github.com/menmer0859/omarchy-surface-restore/pull/5)记录了合入修复分支的配置组件；实现位于[快照 0dd507e](https://github.com/menmer0859/omarchy-surface-restore/commit/0dd507e772b3c0752fa5d56e93fa40ca928980a8)，仍待进入 `main`。
+证据来源：[已验证设备记录（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/verified-surface-laptop-5.md)、[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)及[当前主分支快照](https://github.com/menmer0859/omarchy-surface-restore/commit/7156964aa86aa7f804e4a5048f6cfbcdf9e1df0b)。配置组件已在 PR #7 合入 main；独立插件仓库与目录上架仍待发布。
 
 ## 交给 Agent 安装
 
@@ -89,6 +89,28 @@ https://github.com/menmer0859/omarchy-surface-restore
 
 ## 快速开始
 
+### 一行 Bash 命令安装
+
+在 Surface 上运行下面这行命令，它会获取干净的项目副本并启动交互式安装向导：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-restore/main/scripts/quick-install.sh) face
+```
+
+按提示分别选择锁屏、终端 sudo 和图形 Polkit。传入 `--all` 可选择全部功能，也可以组合传入 `--lock --sudo --polkit`。安装副本会保存在 `~/.local/share/omarchy-surface-restore`，下方的一行卸载命令也会使用这个位置。若该位置已有非本项目目录或含有本地修改，启动器会拒绝覆盖。
+
+如需安装触摸屏支持，将 `face` 替换为 `touch`。如需两个模块，先运行人脸安装命令，再运行触摸安装命令；两个模块仍可分别卸载。
+
+有受信任事务记录的人脸配置可通过一条命令卸载：
+
+```bash
+bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
+```
+
+卸载器恢复有记录的配置，并将新录入的人脸模型归档到受保护备份。它不会移除触摸支持、linux-surface、iptsd 或 Quickshell。没有可信事务记录的旧版安装需要人工审查。
+
+此启动器通过 HTTPS 使用当前 `main` 分支。若希望先检查或固定源码版本，请使用下面的手动获取步骤。
+
 **1 · 获取源码，检查设备。**
 
 ```bash
@@ -103,16 +125,16 @@ git clone https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.loca
 "$HOME/.local/share/omarchy-surface-restore/install.sh"
 ```
 
-人脸安装需要 AUR 助手（`yay` 或 `paru`），随后会请你选择红外摄像头、审核 Howdy 软件包并在本机录入人脸。触摸安装会配置 linux-surface 内核、headers 和 iptsd；完成后需要重启并进入该内核。
+人脸安装通过一次向导组成单一事务：`./install.sh face` 会询问安装锁屏、终端 sudo、图形 Polkit 中的哪些功能；`./install.sh face --all` 一次选择全部，也可组合 `--lock --sudo --polkit`。安装器会请你选择红外摄像头、审核 Howdy 软件包并在本机录入人脸。触摸安装仍是独立模块，会配置 linux-surface 内核、headers 和 iptsd；完成后需要重启并进入该内核。
 
-**3 · 先验证密码兜底，再测试人脸。** 安装人脸模块后先测试锁屏；需要时再分别启用终端和应用授权：
+**3 · 先验证密码兜底，再测试人脸。** 先测试锁屏，再测试所选的 sudo 和 Polkit 路径：
 
 ```bash
-"$HOME/.local/share/omarchy-surface-restore/install.sh" sudo-face    # 可选：终端 sudo 人脸认证
-"$HOME/.local/share/omarchy-surface-restore/install.sh" polkit-face  # 可选：图形管理员授权
 sudo -k -v               # 测试终端认证：先选 n，再选 y
 pkexec /usr/bin/id       # 测试图形 Polkit 请求
 ```
+
+如需一次卸载有记录的人脸认证配置，运行 `"$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face`。它会先列出受影响的功能并只确认一次，然后恢复有记录的文件；新录入的人脸模型默认归档到 `/var/backups/omarchy-surface-restore/`。它不会移除触摸支持、linux-surface、iptsd 或 Quickshell。没有新事务记录的旧版安装不会被猜测性地自动卸载。
 
 <sub>也可直接运行 <code>"$HOME/.local/share/omarchy-surface-restore/install.sh" face</code> 或 <code>"$HOME/.local/share/omarchy-surface-restore/install.sh" touch</code>。完整安装与恢复说明：<a href="https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/README.zh-CN.md">人脸认证</a> · <a href="https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/touch/README.zh-CN.md">触摸屏</a>。</sub>
 
@@ -153,7 +175,7 @@ Omarchy 的图形 Polkit 界面展示请求的操作、管理员账户，以及*
 
 中英双语配置组件可以检查就绪状态，并让你分别选择锁屏、sudo 和 Polkit。状态检查只读取配置，不启动摄像头。
 
-独立插件导出已合入 `main` 并完成本地验证。**目前仍没有可用的 `omarchy plugin add` 安装地址：**配套插件仓库和目录上架仍需后续完成。现阶段请使用上方源码安装器；当前发布状态见[插件分发说明（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
+中英双语配置组件及其独立导出已包含在 `main`。**目前仍没有已发布的 `omarchy plugin add` 地址：**配套插件仓库和目录列表仍需后续单独发布。现阶段请使用上方源码安装器；当前进度见[插件分发说明（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
 
 <details>
 <summary>维护者：生成并验证插件导出</summary>
@@ -181,7 +203,7 @@ omarchy plugin validate /tmp/surface-face-setup
 | 取消后能保证相机立即停止吗？ | 结束界面/PAM 请求，不能证明独立运行的 Howdy matcher 已释放摄像头。 |
 | 可以恢复之前的配置吗？ | 安装器在 `/var/backups/omarchy-surface-restore` 保存快照，可检查并恢复对应模块。 |
 
-**已知限制：** 不保证 matcher 与摄像头立即释放。**待验证：** 其他 Surface 型号和其他 Omarchy 版本。**待完成：** 发布独立插件仓库并申请插件目录上架。具体边界见[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)与[分发指南（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
+**已知限制：** 不保证 matcher 与摄像头立即释放。**待验证：** 其他 Surface 型号和其他 Omarchy 版本。**待完成：** 发布独立插件仓库及其目录列表。具体边界见[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)与[插件分发指南（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
 
 ### 恢复之前的配置
 
@@ -192,6 +214,8 @@ omarchy plugin validate /tmp/surface-face-setup
 ```
 
 恢复操作还原已保存的配置，不会卸载软件包或降级内核、Quickshell。只删除配置组件，也不会移除已经安装的系统认证配置。
+
+通过 Bash 安装的人脸认证事务，可使用快速开始中介绍的一键卸载命令。它只清理事务明确记录的人脸配置，并将新录入的模型保存在受保护备份中。
 
 ## 参与改进
 
@@ -208,7 +232,7 @@ omarchy plugin validate /tmp/surface-face-setup
 | [人脸认证](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/README.zh-CN.md) | 安装、可选接入、升级与恢复 |
 | [触摸屏](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/touch/README.zh-CN.md) | 内核安装、重启验证与恢复 |
 | [插件行为（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md) | 锁屏与唤醒规则、交互、多语言及已知限制 |
-| [插件分发（开发分支，英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md) | 独立导出方式和发布状态 |
+| [插件分发（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md) | 独立导出方式和发布状态 |
 | [本机验收（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/local-acceptance-fixes.md) | 已修复问题与手动复测场景 |
 | [Quickshell 打包（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/modules/face-auth/packaging/quickshell-polkit-restart/README.md) | 返回人脸选择页所需 API 及兼容运行时 |
 
