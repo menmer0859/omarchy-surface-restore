@@ -8,6 +8,7 @@ ln -s /usr/share/omarchy/shell/Commons "$stage/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$stage/Ui"
 ln -s "$root/modules/face-auth/assets" "$stage/assets"
 cat > "$stage/shell.qml" <<'QML'
+//@ pragma OmarchyLoadPatch
 import QtQuick
 import Quickshell
 ShellRoot {

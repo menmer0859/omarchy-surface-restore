@@ -54,6 +54,7 @@ fi
 
 if [[ -r /usr/share/omarchy/shell/Commons/Translations.qml ]] && command -v quickshell >/dev/null 2>&1; then
   echo "Running native QML view tests..."
+  bash modules/face-auth/tests/run-omarchy-load-compat.sh
   bash modules/face-auth/tests/run-qml.sh
   bash modules/face-auth/tests/run-polkit-qml.sh
 else

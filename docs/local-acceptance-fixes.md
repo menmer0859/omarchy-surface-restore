@@ -1,5 +1,7 @@
 # 本机交互修复 2.1：安装、验证与回退
 
+> 2026-10-25 更新：最初的 Quickshell `-2` 包漏带 Omarchy 的 Qt 6.12 加载兼容补丁，会导致第三方插件颜色异常。当前构建配方改为 `-3.1`，详见 [修复记录](quickshell-color-compat-fix.md)。下文 10-22 的部署版本保留为历史记录。
+
 本轮以 Surface Laptop 5 的已登记反馈 ACC-001～007 为范围。修复依据和执行清单见 `local-acceptance-fixes-plan.md`；不新增其他 Surface 型号的支持声明。
 
 ## 本轮变化
@@ -35,7 +37,7 @@
 ```bash
 cd modules/face-auth/packaging/quickshell-polkit-restart
 makepkg -s
-sudo pacman -U ./quickshell-0.3.2.r7.g2b4501a-2-x86_64.pkg.tar.zst
+sudo pacman -U ./quickshell-0.3.2.r7.g2b4501a-3.1-x86_64.pkg.tar.zst
 cd ../../../..
 ./install.sh plugin-ui
 ./install.sh sudo-face
