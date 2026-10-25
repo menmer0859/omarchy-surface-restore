@@ -6,6 +6,8 @@ See [local acceptance fixes, installation and retest](local-acceptance-fixes.md)
 
 ## Omarchy integration
 
+The optional `surface.face-setup` setup bar widget is exported as a separate plugin checkout by `modules/face-auth/scripts/export-setup-plugin.py`. The source repository keeps the manifest nested with the face module; the exporter places a copy at the plugin checkout root, materializes safe source symlinks, and includes only the declared runtime paths. Validate the generated checkout before publishing. See [distribution and publishing status](face-setup-plugin-distribution.md). Adding the setup widget does not perform privileged face setup or start the camera.
+
 - User plugin clones, schemaVersion 1, service entry points, `keepLoaded` and `omarchy.clonedFrom` preserve Omarchy's authentication service lifecycle and capability boundaries. No changes to `/usr/share/omarchy`.
 - Requires the installed shell's `Commons.Translations` API. The current real-device baseline is Omarchy 4.5.0rc1 with the corrected local Quickshell package `0.3.2.r7.g2b4501a-3.1`. The earlier `-2` build omitted Omarchy's Qt 6.12 theme-loader compatibility; see the [repair record](quickshell-color-compat-fix.md). This is an API prerequisite, not a claim that every Omarchy release is compatible. Installers reject a missing API before mutation.
 - Shared QML source lives in `modules/face-auth/assets/face-ui`; each deployed plugin receives its own regular files under `FaceUi/` and flat JSON catalogs in `i18n/`. Development symlinks are dereferenced by the resource deployer; no installed component depends on the repository remaining in place.

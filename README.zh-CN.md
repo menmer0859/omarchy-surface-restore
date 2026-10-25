@@ -26,6 +26,17 @@ cd omarchy-surface-restore
 ./install.sh touch
 ```
 
+### 引导式人脸配置插件
+
+本仓库也可以构建一个独立的 Omarchy 状态栏插件，提供中英双语配置面板和只读就绪检查。生成并验证自包含插件目录：
+
+```bash
+python3 modules/face-auth/scripts/export-setup-plugin.py --output /tmp/surface-face-setup
+omarchy plugin validate /tmp/surface-face-setup
+```
+
+此 GitHub 项目是源码仓库，本身还不是可直接传给插件安装命令的插件仓库。`omarchy plugin add` 要求 Git 仓库根目录包含插件 manifest。独立插件仓库及 Omarchy 插件目录上架尚未发布。发布流程和当前状态见[插件分发说明](docs/face-setup-plugin-distribution.md)。
+
 安装前请阅读各模块说明：[红外人脸识别](modules/face-auth/README.zh-CN.md) · [触摸屏](modules/touch/README.zh-CN.md)。English: [face authentication](modules/face-auth/README.md) · [touchscreen](modules/touch/README.md)。
 
 ## 已验证的设备
