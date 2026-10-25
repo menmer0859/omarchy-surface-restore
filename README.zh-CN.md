@@ -99,7 +99,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-r
 
 按提示分别选择锁屏、终端 sudo 和图形 Polkit。传入 `--all` 可选择全部功能，也可以组合传入 `--lock --sudo --polkit`。安装副本会保存在 `~/.local/share/omarchy-surface-restore`，下方的一行卸载命令也会使用这个位置。若该位置已有非本项目目录或含有本地修改，启动器会拒绝覆盖。
 
-如需安装触摸屏支持，将 `face` 替换为 `touch`。如需两个模块，先运行人脸安装命令，再运行触摸安装命令；两个模块仍可分别卸载。
+如需单独安装触摸屏支持，将 `face` 替换为 `touch`。传入 `all` 可在一次向导中安装两个模块；配置仍彼此独立，卸载人脸认证不会移除触摸支持。
 
 有受信任事务记录的人脸配置可通过一条命令卸载：
 

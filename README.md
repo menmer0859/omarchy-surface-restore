@@ -104,7 +104,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/menmer0859/omarchy-surface-r
 
 Choose lock screen, terminal sudo, and graphical Polkit separately when prompted. Add `--all` to select all three, or pass any combination of `--lock --sudo --polkit`. The installer keeps its checkout at `~/.local/share/omarchy-surface-restore`, which is also used by the one-line uninstaller below. The bootstrap refuses to overwrite an unrelated or locally modified checkout.
 
-To install touchscreen support instead, replace `face` with `touch`. To install both modules, run the face command first and then the touch command; they remain independently removable.
+To install touchscreen support instead, replace `face` with `touch`. Use `all` to install both modules in one guided run; their configuration remains independent, and removing face authentication does not remove touch support.
 
 After a tracked face-auth install, remove its integrations with one command:
 
