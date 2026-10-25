@@ -17,6 +17,8 @@ from pathlib import Path
 root = Path(sys.argv[1])
 found = {}
 for path in root.glob('*/manifest.json'):
+    if path.parent.name.startswith('.'):
+        continue
     try:
         data = json.loads(path.read_text())
         meta = data.get('omarchy') or {}

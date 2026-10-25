@@ -12,7 +12,7 @@ exec "$@"
 SUDO
 chmod +x "$temp/bin/sudo"
 set +e
-output=$(printf '1\nn\n' | PATH="$temp/bin:$PATH" SURFACE_SETUP_BACKUP_ROOT="$temp/backups" \
+output=$(printf '1\nn\n' | PATH="$temp/bin:$PATH" SURFACE_SETUP_TESTING=1 SURFACE_SETUP_BACKUP_ROOT="$temp/backups" \
   bash "$repo_root/scripts/restore.sh" --module face-auth 2>&1)
 status=$?
 set -e

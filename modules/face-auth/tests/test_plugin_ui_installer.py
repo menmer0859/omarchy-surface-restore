@@ -12,11 +12,12 @@ class PluginUiInstallerTests(unittest.TestCase):
     def fixture(self, directory):
         base = Path(directory); bin_dir = base/'bin'; bin_dir.mkdir()
         (bin_dir/'omarchy-shell').write_text('#!/bin/bash\n[[ "$*" == "lock isLocked" ]] && echo "${TEST_LOCK_STATE:-false}"\n')
-        # Emulate only privilege escalation. Skip archive ancestors / and /tmp,
-        # whose metadata an unprivileged test may not change.
+        # Emulate privilege escalation and route the real restore helper into
+        # this fixture tree instead of the host filesystem.
         (bin_dir/'sudo').write_text("""#!/bin/bash
-if [[ "$*" == 'tar -C / -xpf -' ]]; then
- exec python3 -c 'import os,sys,tarfile; prefix=os.environ["TEST_RESTORE_ROOT"].lstrip("/")+"/"; archive=tarfile.open(fileobj=sys.stdin.buffer,mode="r|"); archive.extractall("/",filter=lambda m,p: m if m.name.removeprefix("./").startswith(prefix) else None)'
+if [[ ${1:-} == python3 && ${2:-} == */restore-snapshot.py ]]; then
+ script=$2; shift 2
+ exec python3 "$script" "$@"
 fi
 exec "$@"
 """)
@@ -26,7 +27,7 @@ exec "$@"
         (plugin/'manifest.json').write_text(json.dumps({'id':'test.lock','version':'1.1.0','keepLoaded':True,'entryPoints':{'service':'Service.qml'}, 'omarchy':{'clonedFrom':'omarchy.lock'}}))
         (plugin/'Service.qml').write_text('previous working service')
         (plugin/'FaceAttemptPolicy.js').write_text('previous policy')
-        env = os.environ | {'PATH':str(bin_dir)+':'+os.environ['PATH'], 'HOME':str(base/'home'), 'XDG_CONFIG_HOME':str(base/'config'), 'SURFACE_SETUP_BACKUP_ROOT':str(base/'backups'), 'SURFACE_SETUP_BACKUP_ID':'upgrade', 'TEST_RESTORE_ROOT':str(base)}
+        env = os.environ | {'PATH':str(bin_dir)+':'+os.environ['PATH'], 'HOME':str(base/'home'), 'XDG_CONFIG_HOME':str(base/'config'), 'SURFACE_SETUP_TESTING':'1', 'SURFACE_SETUP_BACKUP_ROOT':str(base/'backups'), 'SURFACE_SETUP_BACKUP_ID':'upgrade', 'TEST_RESTORE_ROOT':str(base)}
         return base, plugin, env
 
     def test_upgrade_and_restore_include_translations_and_keep_existing_clone_id(self):

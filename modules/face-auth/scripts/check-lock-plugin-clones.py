@@ -17,6 +17,8 @@ def main() -> int:
         return 0
 
     for manifest in sorted(plugins_root.glob("*/manifest.json")):
+        if manifest.parent.name.startswith("."):
+            continue
         if manifest.parent.resolve() == allowed_plugin:
             continue
         try:

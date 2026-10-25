@@ -95,14 +95,31 @@ def _has_lock_clone_conflict(plugins_dir: Path) -> tuple[bool, str]:
     except OSError:
         manifests = []
     for manifest_path in manifests:
+        if manifest_path.parent.name.startswith("."):
+            continue
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        metadata = manifest.get("omarchy", {})
-        if metadata.get("clonedFrom") == "omarchy.lock" and manifest.get("id") != "surface.lock":
+        if not isinstance(manifest, dict):
+            continue
+        metadata = manifest.get("omarchy") or {}
+        if isinstance(metadata, dict) and metadata.get("clonedFrom") == "omarchy.lock" and manifest.get("id") != "surface.lock":
             return True, str(manifest_path.parent)
     return False, ""
+
+
+def _user_plugin_enabled(home: Path, plugin_id: str) -> bool:
+    config_path = home / ".config/omarchy/shell.json"
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(config, dict) or plugin_id in config.get("disabledPlugins", []):
+        return False
+    entries = config.get("plugins", [])
+    return isinstance(entries, list) and any(
+        isinstance(entry, dict) and entry.get("id") == plugin_id for entry in entries)
 
 
 def collect_status(root: Path | str = Path("/"), home: Path | str | None = None, username: str | None = None) -> dict:
@@ -134,12 +151,14 @@ def collect_status(root: Path | str = Path("/"), home: Path | str | None = None,
     plugins_dir = home / ".config/omarchy/plugins"
     lock_conflict, conflict_path = _has_lock_clone_conflict(plugins_dir)
     lock_clone = is_file(plugins_dir / "surface.lock/manifest.json")
+    lock_enabled = _user_plugin_enabled(home, "surface.lock")
     lock_ready = (password_fallback and face_pam and howdy["ready"] and camera["available"]
-                  and camera["accessible"] and lock_clone and not lock_conflict)
+                  and camera["accessible"] and lock_clone and lock_enabled and not lock_conflict)
     lock = {
         "passwordFallback": password_fallback,
         "facePam": face_pam,
         "pluginInstalled": lock_clone,
+        "pluginEnabled": lock_enabled,
         "conflict": lock_conflict,
         "conflictPlugin": conflict_path,
         "ready": lock_ready,
@@ -156,24 +175,21 @@ def collect_status(root: Path | str = Path("/"), home: Path | str | None = None,
     polkit_module = rooted(root, "/usr/local/lib/security/pam_surface_face_consent.so")
     polkit_helper = rooted(root, "/usr/local/libexec/omarchy-polkit-howdy")
     polkit_dropin = rooted(root, "/etc/systemd/system/polkit-agent-helper@.service.d/60-omarchy-surface-face.conf")
-    polkit_plugins = []
+    polkit_plugin_id = f"{username}.polkit" if username else ""
     try:
-        polkit_plugins = list(plugins_dir.glob("*.polkit/manifest.json"))
-    except OSError:
-        pass
-    polkit_plugin = False
-    for path in polkit_plugins:
-        try:
-            manifest = json.loads(read_text(path))
-        except json.JSONDecodeError:
-            continue
-        if manifest.get("omarchy", {}).get("surfaceFaceAuth") is True:
-            polkit_plugin = True
-            break
+        manifest = json.loads(read_text(plugins_dir / polkit_plugin_id / "manifest.json"))
+        metadata = manifest.get("omarchy") or {}
+        polkit_plugin = (manifest.get("id") == polkit_plugin_id
+                         and metadata.get("clonedFrom") == "omarchy.polkit"
+                         and metadata.get("surfaceFaceAuth") is True)
+    except (json.JSONDecodeError, AttributeError):
+        polkit_plugin = False
+    polkit_plugin_active = polkit_plugin and _user_plugin_enabled(home, polkit_plugin_id)
     polkit_enabled = ("pam_surface_face_consent.so" in polkit_pam and is_file(polkit_module)
-                      and executable(polkit_helper) and is_file(polkit_dropin) and polkit_plugin)
+                      and executable(polkit_helper) and is_file(polkit_dropin) and polkit_plugin_active)
     polkit_ready = polkit_enabled and howdy["ready"] and camera_ready
-    polkit = {"enabled": polkit_enabled, "ready": polkit_ready, "returnToFace": "unknown"}
+    polkit = {"enabled": polkit_enabled, "pluginInstalled": polkit_plugin,
+              "pluginEnabled": polkit_plugin_active, "ready": polkit_ready, "returnToFace": "unknown"}
 
     return {
         "schemaVersion": 1,

@@ -6,11 +6,11 @@ source "$root/lib/common.sh"
 
 usage() {
   cat <<'EOF_USAGE'
-Usage: ./install.sh [touch|face|sudo-face|polkit-face|plugin-ui|all|check]
+Usage: ./install.sh [touch|face [--all|--lock --sudo --polkit]|sudo-face|polkit-face|plugin-ui|all|check]
 
 Install one module independently:
   touch       Restore Surface touchscreen support (linux-surface + iptsd)
-  face        Configure IR face authentication and lock-screen integration
+  face        Guided one-command IR face setup; select lock, sudo, and Polkit
   sudo-face   Optional consent-gated terminal sudo face authentication
   polkit-face Optional consent-gated graphical admin authentication
   plugin-ui   Upgrade installed face UI without changing PAM or Howdy
@@ -44,13 +44,13 @@ check_system() {
   fi
 }
 
-if [[ $# -gt 1 ]]; then usage >&2; exit 2; fi
 action=${1:-}
+if [[ -n "$action" ]]; then shift; fi
 if [[ -z "$action" ]]; then
   cat <<'EOF_MENU'
 Choose a module or optional face-authentication path:
   1) Restore touchscreen support
-  2) Configure IR face unlock and lock-screen switching
+  2) Guided face setup (choose lock-screen, terminal sudo, and/or graphical authorization)
   3) Enable consent-gated face authentication for terminal sudo
   4) Enable consent-gated face authentication for graphical admin prompts
   5) Install both modules (legacy touch + initial face behavior)
@@ -73,7 +73,7 @@ case "$action" in
   -h|--help|help) usage ;;
   check) check_system ;;
   touch) exec "$root/modules/touch/install.sh" ;;
-  face|sudo-face|polkit-face|plugin-ui) exec "$root/modules/face-auth/install.sh" "$action" ;;
+  face|sudo-face|polkit-face|plugin-ui) exec "$root/modules/face-auth/install.sh" "$action" "$@" ;;
   all)
     "$root/modules/touch/install.sh"
     "$root/modules/face-auth/install.sh" face
