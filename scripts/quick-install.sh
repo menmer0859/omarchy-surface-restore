@@ -7,6 +7,12 @@ repository_url='https://github.com/menmer0859/omarchy-surface-restore.git'
 expected_https='https://github.com/menmer0859/omarchy-surface-restore.git'
 expected_ssh='git@github.com:menmer0859/omarchy-surface-restore.git'
 checkout="${HOME:?HOME is required}/.local/share/omarchy-surface-restore"
+stage_dir=''
+
+cleanup() {
+  [[ -z $stage_dir ]] || rm -rf -- "$stage_dir"
+}
+trap cleanup EXIT
 
 fail() {
   printf 'quick-install: %s\n' "$*" >&2
@@ -28,7 +34,11 @@ if [[ -e $checkout || -L $checkout ]]; then
     || fail "Existing checkout has local changes. Review it before using: $checkout"
 else
   mkdir -p "$(dirname "$checkout")"
-  git clone --depth 1 "$repository_url" "$checkout"
+  stage_dir=$(mktemp -d "${checkout}.download.XXXXXX")
+  git clone --depth 1 "$repository_url" "$stage_dir/repository"
+  mv -- "$stage_dir/repository" "$checkout"
+  rmdir -- "$stage_dir"
+  stage_dir=''
 fi
 
 exec bash "$checkout/install.sh" "$@"

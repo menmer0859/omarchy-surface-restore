@@ -114,7 +114,7 @@ bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
 
 The uninstaller restores recorded configuration and archives a newly enrolled model in the protected backup. It does not remove touchscreen support, linux-surface, iptsd, or Quickshell. Legacy installations without a trusted transaction record require manual review.
 
-The bootstrap uses the current `main` branch over HTTPS. For a manually reviewed or pinned source, use the clone-and-check steps below instead.
+The bootstrap uses the current `main` branch over HTTPS. To inspect the checkout before running its installer, use the manual steps below.
 
 **1 · Get the source and check your device.**
 

@@ -109,7 +109,7 @@ bash "$HOME/.local/share/omarchy-surface-restore/uninstall.sh" face
 
 卸载器恢复有记录的配置，并将新录入的人脸模型归档到受保护备份。它不会移除触摸支持、linux-surface、iptsd 或 Quickshell。没有可信事务记录的旧版安装需要人工审查。
 
-此启动器通过 HTTPS 使用当前 `main` 分支。若希望先检查或固定源码版本，请使用下面的手动获取步骤。
+此启动器通过 HTTPS 使用当前 `main` 分支。若希望先检查源码再运行安装器，请使用下面的手动获取步骤。
 
 **1 · 获取源码，检查设备。**
 

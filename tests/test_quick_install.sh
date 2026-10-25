@@ -19,6 +19,7 @@ cat > "$temp/bin/git" <<'GIT'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ ${1:-} == clone ]]; then
+  [[ ${GIT_FAIL_CLONE:-0} != 1 ]] || exit 7
   source_dir=${GIT_FIXTURE_SOURCE:?}
   target=${@: -1}
   mkdir -p "$target/.git"
@@ -41,6 +42,16 @@ HOME="$temp/home-first" INSTALL_ARGS_FILE="$temp/first.args" GIT_FIXTURE_SOURCE=
 target="$temp/home-first/.local/share/omarchy-surface-restore"
 [[ -f $target/install.sh ]] || fail 'first install did not retain the project checkout'
 [[ $(cat "$temp/first.args") == 'face --lock --sudo' ]] || fail 'installer arguments were not forwarded'
+
+# A failed clone is cleaned from the staging area, so the next run can retry.
+if HOME="$temp/home-failed" GIT_FAIL_CLONE=1 INSTALL_ARGS_FILE="$temp/failed.args" GIT_FIXTURE_SOURCE="$temp/fixture" \
+  PATH="$temp/bin:$PATH" bash "$bootstrap" face >"$temp/failed.log" 2>&1; then
+  fail 'bootstrap ignored a failed clone'
+fi
+[[ ! -e "$temp/home-failed/.local/share/omarchy-surface-restore" ]] || fail 'failed clone left a poisoned checkout path'
+if compgen -G "$temp/home-failed/.local/share/omarchy-surface-restore.download.*" >/dev/null; then
+  fail 'failed clone left temporary staging data'
+fi
 
 # A clean existing project checkout is reused without an update or reclone.
 HOME="$temp/home-first" INSTALL_ARGS_FILE="$temp/reuse.args" GIT_FIXTURE_SOURCE="$temp/fixture" \
