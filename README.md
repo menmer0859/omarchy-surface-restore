@@ -26,6 +26,17 @@ The menu lets you choose a module. You can also start either directly:
 ./install.sh touch
 ```
 
+### Guided face setup plugin
+
+This repository also builds a standalone Omarchy bar-widget plugin with a bilingual setup panel and read-only readiness checks. Generate and validate the self-contained plugin checkout with:
+
+```bash
+python3 modules/face-auth/scripts/export-setup-plugin.py --output /tmp/surface-face-setup
+omarchy plugin validate /tmp/surface-face-setup
+```
+
+The GitHub project is the source repository; it is not itself a directly installable plugin URL. `omarchy plugin add` installs from a Git repository whose root contains the plugin manifest. A dedicated published plugin repository and any Omarchy catalog listing are still pending. See [plugin distribution](docs/face-setup-plugin-distribution.md) for the publishing path and current status.
+
 Review the module instructions before installation: [IR face authentication](modules/face-auth/README.md) · [Touchscreen](modules/touch/README.md). 中文：[人脸解锁](modules/face-auth/README.zh-CN.md) · [触摸屏](modules/touch/README.zh-CN.md)。
 
 ## Verified reference setup

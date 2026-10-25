@@ -13,6 +13,17 @@ From the repository root:
 ./install.sh face
 ```
 
+### Guided setup panel
+
+The `surface.face-setup` bar widget offers read-only compatibility checks and independent Lock screen, terminal sudo, and graphical Polkit selections. Build and validate its standalone plugin checkout from the repository root:
+
+```bash
+python3 modules/face-auth/scripts/export-setup-plugin.py --output /tmp/surface-face-setup
+omarchy plugin validate /tmp/surface-face-setup
+```
+
+The exported folder is ready to publish as the root of its own Git repository. Once that repository is published, install it with `omarchy plugin add <plugin-git-url> --enable`. The export is currently validated locally; the companion repository and catalog listing are not yet published. Details: [plugin distribution](../../docs/face-setup-plugin-distribution.md).
+
 The installer checks Omarchy, its plugin translation API, stable V4L2 paths and an accessible IR camera. It asks you to identify the camera; it does not guess `/dev/video0`. Review the AUR `howdy-git` transaction. Howdy captures and stores the enrolled face model locally under `/etc/howdy/models/`; the model is never copied into this repository.
 
 After Howdy enrollment, lock-screen face/password integration is installed. On a lit lock screen, manual lock itself does not start the camera; an explicit fresh interaction can request a scan. A confirmed display-off-to-wake or suspend-resume transition waits about 1.5 seconds and requests one scan. Failed attempts do not cause periodic background scanning. Password stays available.

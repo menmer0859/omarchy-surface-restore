@@ -13,6 +13,17 @@
 ./install.sh face
 ```
 
+### 引导式配置面板
+
+`surface.face-setup` 状态栏插件提供只读兼容性检查，并允许分别选择锁屏、终端 sudo 和图形 Polkit。请在源码仓库根目录生成并验证独立插件目录：
+
+```bash
+python3 modules/face-auth/scripts/export-setup-plugin.py --output /tmp/surface-face-setup
+omarchy plugin validate /tmp/surface-face-setup
+```
+
+导出的目录可作为单独 Git 仓库的根目录发布。该仓库发布后，用户可运行 `omarchy plugin add <插件 Git 地址> --enable` 安装。目前已完成本地导出与验证，配套仓库及插件目录上架尚未发布。详见[插件分发说明](../../docs/face-setup-plugin-distribution.md)。
+
 安装器会检查 Omarchy、插件翻译 API、稳定的 V4L2 路径及红外相机访问权限，并请你辨认相机，不会猜测 `/dev/video0`。请审核 AUR 的 `howdy-git` 软件包变更。Howdy 会在本机 `/etc/howdy/models/` 保存录入的人脸模型；模型不会复制进仓库。
 
 录入完成后会安装锁屏的人脸/密码路径。手动锁屏本身不启动相机；屏幕亮着时，新的明确操作可以请求一次识别。系统确认屏幕由熄灭变亮或从休眠恢复后，等待约 1.5 秒并尝试一次。识别失败后不会在后台周期扫描。密码始终可用。
