@@ -149,19 +149,19 @@ Omarchy 的图形 Polkit 界面展示请求的操作、管理员账户，以及*
 | 人脸认证 | Howdy、所选 PAM 服务、Omarchy 锁屏和授权界面 |
 | 触摸屏 | linux-surface 软件源、内核、headers 与 iptsd |
 
-### 从 Omarchy 配置人脸（开发中）
+### 从 Omarchy 配置人脸
 
 中英双语配置组件可以检查就绪状态，并让你分别选择锁屏、sudo 和 Polkit。状态检查只读取配置，不启动摄像头。
 
-独立插件导出已在[配置组件开发分支](https://github.com/menmer0859/omarchy-surface-restore/tree/codex/omarchy-face-setup-wizard)实现并完成本地验证。**这部分尚未进入 `main`，也尚未发布可用的 `omarchy plugin add` 安装地址。**现阶段请使用上方源码安装器；发布状态见[插件分发说明（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md)。
+独立插件导出已合入 `main` 并完成本地验证。**目前仍没有可用的 `omarchy plugin add` 安装地址：**配套插件仓库和目录上架仍需后续完成。现阶段请使用上方源码安装器；当前发布状态见[插件分发说明（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
 
 <details>
 <summary>维护者：生成并验证插件导出</summary>
 
-以下命令将配置组件开发分支克隆到独立目录。导出目录需不存在或为空：
+以下命令将当前 `main` 分支克隆到独立目录。导出目录需不存在或为空：
 
 ```bash
-git clone --branch codex/omarchy-face-setup-wizard https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.local/share/omarchy-surface-restore-dev"
+git clone --branch main https://github.com/menmer0859/omarchy-surface-restore.git "$HOME/.local/share/omarchy-surface-restore-dev"
 python3 "$HOME/.local/share/omarchy-surface-restore-dev/modules/face-auth/scripts/export-setup-plugin.py" --output /tmp/surface-face-setup
 omarchy plugin validate /tmp/surface-face-setup
 ```
@@ -181,7 +181,7 @@ omarchy plugin validate /tmp/surface-face-setup
 | 取消后能保证相机立即停止吗？ | 结束界面/PAM 请求，不能证明独立运行的 Howdy matcher 已释放摄像头。 |
 | 可以恢复之前的配置吗？ | 安装器在 `/var/backups/omarchy-surface-restore` 保存快照，可检查并恢复对应模块。 |
 
-**已知限制：** 不保证 matcher 与摄像头立即释放。**待验证：** 其他 Surface 型号和其他 Omarchy 版本。**待完成：** 配置组件合入 `main`，以及发布独立插件安装地址。具体边界见[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)与[开发分支的分发指南（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/codex/omarchy-face-setup-wizard/docs/face-setup-plugin-distribution.md)。
+**已知限制：** 不保证 matcher 与摄像头立即释放。**待验证：** 其他 Surface 型号和其他 Omarchy 版本。**待完成：** 发布独立插件仓库并申请插件目录上架。具体边界见[行为约定（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/plugin-development.md)与[分发指南（英文）](https://github.com/menmer0859/omarchy-surface-restore/blob/main/docs/face-setup-plugin-distribution.md)。
 
 ### 恢复之前的配置
 

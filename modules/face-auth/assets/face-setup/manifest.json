@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "surface.face-setup",
+  "name": "Surface Face Setup",
+  "version": "1.0.0",
+  "author": "Surface Omarchy community",
+  "description": "Check and configure Surface face authentication",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Face setup",
+    "description": "Configure Surface face authentication",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
